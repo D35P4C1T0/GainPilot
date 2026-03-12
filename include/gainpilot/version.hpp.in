@@ -1,0 +1,15 @@
+#pragma once
+
+#define GAINPILOT_VERSION_MAJOR @PROJECT_VERSION_MAJOR@
+#define GAINPILOT_VERSION_MINOR @PROJECT_VERSION_MINOR@
+#define GAINPILOT_VERSION_PATCH @PROJECT_VERSION_PATCH@
+#define GAINPILOT_VERSION_STRING "@PROJECT_VERSION@"
+
+namespace gainpilot {
+
+inline constexpr int kVersionMajor = GAINPILOT_VERSION_MAJOR;
+inline constexpr int kVersionMinor = GAINPILOT_VERSION_MINOR;
+inline constexpr int kVersionPatch = GAINPILOT_VERSION_PATCH;
+inline constexpr char kVersionString[] = GAINPILOT_VERSION_STRING;
+
+}  // namespace gainpilot

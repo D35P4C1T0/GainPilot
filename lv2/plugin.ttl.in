@@ -1,0 +1,160 @@
+@prefix doap: <http://usefulinc.com/ns/doap#> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+@prefix atom: <http://lv2plug.in/ns/ext/atom#> .
+@prefix lv2: <http://lv2plug.in/ns/lv2core#> .
+@prefix pp: <http://lv2plug.in/ns/ext/port-props#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix state: <http://lv2plug.in/ns/ext/state#> .
+@prefix ui: <http://lv2plug.in/ns/extensions/ui#> .
+@prefix urid: <http://lv2plug.in/ns/ext/urid#> .
+@prefix units: <http://lv2plug.in/ns/extensions/units#> .
+
+<@plugin_uri@>
+  a lv2:Plugin ;
+  doap:name "GainPilot" ;
+  doap:license <https://opensource.org/licenses/MIT> ;
+  lv2:requiredFeature urid:map ;
+  lv2:optionalFeature lv2:reportsLatency ;
+  lv2:extensionData state:interface ;
+@PLUGIN_UI_REFERENCE@
+  doap:developer [
+    foaf:name "GainPilot contributors"
+  ] ;
+  lv2:optionalFeature lv2:hardRTCapable ;
+  lv2:port
+    [
+      a lv2:InputPort, lv2:AudioPort ;
+      lv2:index 0 ;
+      lv2:symbol "in_l" ;
+      lv2:name "Input L"
+    ] ,
+@CHANNEL_PORTS@
+    [
+      a lv2:InputPort, lv2:ControlPort ;
+      lv2:index @CONTROL_BASE@ ;
+      lv2:symbol "target_level" ;
+      lv2:name "Target Level" ;
+      lv2:default -16.0 ;
+      lv2:minimum -30.0 ;
+      lv2:maximum -10.0 ;
+      units:unit units:db
+    ] ,
+    [
+      a lv2:InputPort, lv2:ControlPort ;
+      lv2:index @CONTROL_BASE_PLUS_1@ ;
+      lv2:symbol "true_peak" ;
+      lv2:name "True Peak" ;
+      lv2:default -1.0 ;
+      lv2:minimum -5.0 ;
+      lv2:maximum 0.0 ;
+      units:unit units:db
+    ] ,
+    [
+      a lv2:InputPort, lv2:ControlPort ;
+      lv2:index @CONTROL_BASE_PLUS_2@ ;
+      lv2:symbol "max_gain" ;
+      lv2:name "Max Gain" ;
+      lv2:default 17.0 ;
+      lv2:minimum -10.0 ;
+      lv2:maximum 30.0 ;
+      units:unit units:db
+    ] ,
+    [
+      a lv2:InputPort, lv2:ControlPort ;
+      lv2:index @CONTROL_BASE_PLUS_3@ ;
+      lv2:symbol "freeze_level" ;
+      lv2:name "Legacy Freeze" ;
+      lv2:default -50.0 ;
+      lv2:minimum -70.0 ;
+      lv2:maximum -10.0 ;
+      pp:notOnGUI true ;
+      units:unit units:db
+    ] ,
+    [
+      a lv2:InputPort, lv2:ControlPort ;
+      lv2:index @CONTROL_BASE_PLUS_4@ ;
+      lv2:symbol "input_level" ;
+      lv2:name "Input Level" ;
+      lv2:default -23.0 ;
+      lv2:minimum -40.0 ;
+      lv2:maximum 0.0 ;
+      units:unit units:db
+    ] ,
+    [
+      a lv2:InputPort, lv2:ControlPort ;
+      lv2:index @CONTROL_BASE_PLUS_5@ ;
+      lv2:symbol "correction_high" ;
+      lv2:name "Correction High" ;
+      lv2:default 100.0 ;
+      lv2:minimum 0.0 ;
+      lv2:maximum 100.0 ;
+      units:unit units:pc
+    ] ,
+    [
+      a lv2:InputPort, lv2:ControlPort ;
+      lv2:index @CONTROL_BASE_PLUS_6@ ;
+      lv2:symbol "correction_low" ;
+      lv2:name "Correction Low" ;
+      lv2:default 100.0 ;
+      lv2:minimum 0.0 ;
+      lv2:maximum 100.0 ;
+      units:unit units:pc
+    ] ,
+    [
+      a lv2:InputPort, lv2:ControlPort, lv2:EnumerationPort ;
+      lv2:index @CONTROL_BASE_PLUS_7@ ;
+      lv2:symbol "corr_mix_mode" ;
+      lv2:name "Corr Mix Mode" ;
+      lv2:default 0.0 ;
+      lv2:minimum 0.0 ;
+      lv2:maximum 3.0 ;
+      lv2:scalePoint [ rdfs:label "Linear / Linear" ; rdf:value 0.0 ] ;
+      lv2:scalePoint [ rdfs:label "Linear / Log" ; rdf:value 1.0 ] ;
+      lv2:scalePoint [ rdfs:label "Log / Linear" ; rdf:value 2.0 ] ;
+      lv2:scalePoint [ rdfs:label "Log / Log" ; rdf:value 3.0 ]
+    ] ,
+    [
+      a lv2:InputPort, lv2:ControlPort, lv2:EnumerationPort ;
+      lv2:index @CONTROL_BASE_PLUS_8@ ;
+      lv2:symbol "meter_mode" ;
+      lv2:name "Meter Mode" ;
+      lv2:default 0.0 ;
+      lv2:minimum 0.0 ;
+      lv2:maximum 2.0 ;
+      lv2:scalePoint [ rdfs:label "Momentary" ; rdf:value 0.0 ] ;
+      lv2:scalePoint [ rdfs:label "Short-Term" ; rdf:value 1.0 ] ;
+      lv2:scalePoint [ rdfs:label "Integrated" ; rdf:value 2.0 ]
+    ] ,
+    [
+      a lv2:InputPort, lv2:ControlPort, lv2:ToggledPort ;
+      lv2:index @CONTROL_BASE_PLUS_9@ ;
+      lv2:symbol "meter_reset" ;
+      lv2:name "Reset Integrated" ;
+      lv2:default 0.0 ;
+      lv2:minimum 0.0 ;
+      lv2:maximum 1.0
+    ] ,
+    [
+      a lv2:OutputPort, lv2:ControlPort ;
+      lv2:index @CONTROL_BASE_PLUS_10@ ;
+      lv2:symbol "meter_value" ;
+      lv2:name "Meter Value" ;
+      lv2:default -70.0 ;
+      lv2:minimum -70.0 ;
+      lv2:maximum 10.0 ;
+      pp:notOnGUI true ;
+      units:unit units:db
+    ] ,
+    [
+      a lv2:OutputPort, lv2:ControlPort ;
+      lv2:index @CONTROL_BASE_PLUS_11@ ;
+      lv2:symbol "latency" ;
+      lv2:name "Latency" ;
+      lv2:designation lv2:latency ;
+      lv2:default 0.0 ;
+      lv2:minimum 0.0 ;
+      lv2:maximum 4096.0 ;
+      pp:notOnGUI true ;
+      units:unit units:frame
+    ] .

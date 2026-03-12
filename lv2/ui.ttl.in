@@ -1,0 +1,68 @@
+@prefix lv2: <http://lv2plug.in/ns/lv2core#> .
+@prefix ui: <http://lv2plug.in/ns/extensions/ui#> .
+
+<@ui_uri@>
+  a ui:Gtk3UI ;
+  ui:plugin <@plugin_uri@> ;
+  lv2:binary <@ui_binary_name@.so> ;
+  lv2:optionalFeature ui:fixedSize, ui:noUserResize ;
+  ui:portNotification [
+    ui:plugin <@plugin_uri@> ;
+    ui:portIndex @CONTROL_BASE@ ;
+    ui:protocol ui:floatProtocol
+  ] ,
+  [
+    ui:plugin <@plugin_uri@> ;
+    ui:portIndex @CONTROL_BASE_PLUS_1@ ;
+    ui:protocol ui:floatProtocol
+  ] ,
+  [
+    ui:plugin <@plugin_uri@> ;
+    ui:portIndex @CONTROL_BASE_PLUS_2@ ;
+    ui:protocol ui:floatProtocol
+  ] ,
+  [
+    ui:plugin <@plugin_uri@> ;
+    ui:portIndex @CONTROL_BASE_PLUS_3@ ;
+    ui:protocol ui:floatProtocol
+  ] ,
+  [
+    ui:plugin <@plugin_uri@> ;
+    ui:portIndex @CONTROL_BASE_PLUS_4@ ;
+    ui:protocol ui:floatProtocol
+  ] ,
+  [
+    ui:plugin <@plugin_uri@> ;
+    ui:portIndex @CONTROL_BASE_PLUS_5@ ;
+    ui:protocol ui:floatProtocol
+  ] ,
+  [
+    ui:plugin <@plugin_uri@> ;
+    ui:portIndex @CONTROL_BASE_PLUS_6@ ;
+    ui:protocol ui:floatProtocol
+  ] ,
+  [
+    ui:plugin <@plugin_uri@> ;
+    ui:portIndex @CONTROL_BASE_PLUS_7@ ;
+    ui:protocol ui:floatProtocol
+  ] ,
+  [
+    ui:plugin <@plugin_uri@> ;
+    ui:portIndex @CONTROL_BASE_PLUS_8@ ;
+    ui:protocol ui:floatProtocol
+  ] ,
+  [
+    ui:plugin <@plugin_uri@> ;
+    ui:portIndex @CONTROL_BASE_PLUS_9@ ;
+    ui:protocol ui:floatProtocol
+  ] ,
+  [
+    ui:plugin <@plugin_uri@> ;
+    ui:portIndex @CONTROL_BASE_PLUS_10@ ;
+    ui:protocol ui:floatProtocol
+  ] ,
+  [
+    ui:plugin <@plugin_uri@> ;
+    ui:portIndex @CONTROL_BASE_PLUS_11@ ;
+    ui:protocol ui:floatProtocol
+  ] .

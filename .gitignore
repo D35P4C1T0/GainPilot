@@ -1,0 +1,7 @@
+build/
+dist/
+external/vst3sdk/
+*.lv2/
+*.vst3/
+*.zip
+reference/
