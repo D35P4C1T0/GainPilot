@@ -29,9 +29,6 @@ jobs:
         run: cmake --install build --prefix "$PWD/stage"
       - name: Generate packages
         run: cpack --config build/CPackConfig.cmake
-      - name: Archive staged plugins
-        run: |
-          cmake -E tar cfv "build/packages/gainpilot-${{ github.ref_name }}-linux-plugins.zip" --format=zip stage
       - uses: actions/upload-artifact@v6
         with:
           name: release-linux-assets
@@ -65,9 +62,6 @@ jobs:
       - name: Generate packages
         shell: pwsh
         run: cpack --config build/CPackConfig.cmake
-      - name: Archive staged plugins
-        shell: pwsh
-        run: cmake -E tar cfv "build/packages/gainpilot-${{ github.ref_name }}-windows-plugins.zip" --format=zip stage
       - uses: actions/upload-artifact@v6
         with:
           name: release-windows-assets
