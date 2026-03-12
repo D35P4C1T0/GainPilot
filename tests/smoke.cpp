@@ -112,7 +112,7 @@ int main() {
     return 1;
   }
   if (processor.currentLatencySamples() < 1500.0f || processor.currentLatencySamples() > 1800.0f) {
-    std::cerr << "Latency does not match expected LUveler-style range\n";
+    std::cerr << "Latency does not match the expected fixed-latency range\n";
     return 1;
   }
 

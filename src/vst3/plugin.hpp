@@ -3,7 +3,6 @@
 #include <array>
 #include <atomic>
 #include <cstdint>
-#include <fstream>
 #include <optional>
 #include <span>
 #include <vector>
@@ -42,8 +41,6 @@ private:
   void ensureScratchCapacity(std::size_t samples);
   [[nodiscard]] bool resetForTransportDiscontinuity(const Steinberg::Vst::ProcessData& data);
   void applyNormalizedParameter(Steinberg::Vst::ParamID tag, Steinberg::Vst::ParamValue value);
-  void traceProcessState(const Steinberg::Vst::ProcessData& data, bool transportReset);
-  void traceMessage(const char* message);
 
   template <typename SampleType>
   void processDoublePrecision(SampleType** input, SampleType** output, Steinberg::int32 numSamples);
@@ -53,8 +50,6 @@ private:
   Steinberg::uint32 latencySamples_{0};
   Steinberg::Vst::ParamValue lastMeterNormalized_{0.0};
   std::optional<Steinberg::int64> lastProjectTimeSamples_{};
-  std::ofstream traceLog_{};
-  std::uint32_t traceBlocksRemaining_{32768};
   std::array<std::vector<float>, ChannelCount> tempInputs_{};
   std::array<std::vector<float>, ChannelCount> tempOutputs_{};
   std::array<const float*, ChannelCount> tempInputPtrs_{};

@@ -2,12 +2,10 @@
 
 #include <algorithm>
 #include <array>
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <cmath>
-#include <iomanip>
 
 #include "base/source/fstreamer.h"
 #include "pluginterfaces/base/ibstream.h"
@@ -19,8 +17,6 @@
 namespace gainpilot::vst3 {
 
 namespace {
-
-constexpr std::uint32_t kTraceBlockBudget = 32768;
 
 template <std::size_t ChannelCount>
 constexpr Steinberg::Vst::SpeakerArrangement speakerArrangementFor() {
@@ -63,7 +59,6 @@ std::vector<std::byte> readStateBytes(Steinberg::IBStream* stream) {
 template <std::size_t ChannelCount>
 GainPilotPlugin<ChannelCount>::GainPilotPlugin() {
   setControllerClass(kControllerCid);
-  traceLog_.open("/tmp/gainpilot_vst3_trace.log", std::ios::out | std::ios::app);
 }
 
 template <std::size_t ChannelCount>
@@ -75,7 +70,6 @@ Steinberg::tresult PLUGIN_API GainPilotPlugin<ChannelCount>::initialize(Steinber
 
   this->addAudioInput(inputBusName<ChannelCount>(), speakerArrangementFor<ChannelCount>());
   this->addAudioOutput(outputBusName<ChannelCount>(), speakerArrangementFor<ChannelCount>());
-  traceMessage("initialize");
 
   return Steinberg::kResultOk;
 }
@@ -90,8 +84,6 @@ Steinberg::tresult PLUGIN_API GainPilotPlugin<ChannelCount>::setActive(Steinberg
   if (state) {
     processor_.reset();
     lastProjectTimeSamples_.reset();
-    traceBlocksRemaining_ = kTraceBlockBudget;
-    traceMessage("setActive(true): processor reset");
   }
   return Steinberg::kResultOk;
 }
@@ -107,8 +99,6 @@ Steinberg::tresult PLUGIN_API GainPilotPlugin<ChannelCount>::setupProcessing(Ste
   processor_.setParameters(parameterState_);
   latencySamples_ = static_cast<Steinberg::uint32>(processor_.latencySamples());
   ensureScratchCapacity(static_cast<std::size_t>(newSetup.maxSamplesPerBlock));
-  traceBlocksRemaining_ = kTraceBlockBudget;
-  traceMessage(newSetup.processMode == Steinberg::Vst::kOffline ? "setupProcessing: offline" : "setupProcessing: realtime/prefetch");
   return Steinberg::kResultOk;
 }
 
@@ -153,7 +143,6 @@ void GainPilotPlugin<ChannelCount>::applyNormalizedParameter(Steinberg::Vst::Par
   const auto id = static_cast<ParamId>(tag);
   if (id < ParamId::count && isAutomatableStateParam(id)) {
     parameterState_.setNormalized(id, static_cast<float>(value));
-    traceBlocksRemaining_ = kTraceBlockBudget;
   }
 }
 
@@ -237,46 +226,10 @@ bool GainPilotPlugin<ChannelCount>::resetForTransportDiscontinuity(const Steinbe
   if (needsReset) {
     processor_.reset();
     processor_.setParameters(parameterState_);
-    traceBlocksRemaining_ = kTraceBlockBudget;
   }
 
   lastProjectTimeSamples_ = currentProjectTime;
   return needsReset;
-}
-
-template <std::size_t ChannelCount>
-void GainPilotPlugin<ChannelCount>::traceMessage(const char* message) {
-  if (!traceLog_.is_open()) {
-    return;
-  }
-
-  traceLog_ << "[msg] " << message << '\n';
-  traceLog_.flush();
-}
-
-template <std::size_t ChannelCount>
-void GainPilotPlugin<ChannelCount>::traceProcessState(const Steinberg::Vst::ProcessData& data, bool transportReset) {
-  if (!traceLog_.is_open() || traceBlocksRemaining_ == 0) {
-    return;
-  }
-
-  const auto projectTime = data.processContext != nullptr ? data.processContext->projectTimeSamples : -1;
-  traceLog_ << std::fixed << std::setprecision(3)
-            << "[blk] mode=" << data.processMode
-            << " reset=" << (transportReset ? 1 : 0)
-            << " proj=" << projectTime
-            << " ns=" << data.numSamples
-            << " target=" << parameterState_.get(ParamId::targetLevel)
-            << " input=" << parameterState_.get(ParamId::inputLevel)
-            << " tp=" << parameterState_.get(ParamId::truePeak)
-            << " gain=" << processor_.currentAppliedGainDb()
-            << " inS=" << processor_.currentInputShortTermLufs()
-            << " inI=" << processor_.currentInputIntegratedLufs()
-            << " outS=" << processor_.currentOutputShortTermLufs()
-            << " outI=" << processor_.currentOutputIntegratedLufs()
-            << '\n';
-  traceLog_.flush();
-  --traceBlocksRemaining_;
 }
 
 template <std::size_t ChannelCount>
@@ -316,7 +269,8 @@ Steinberg::tresult PLUGIN_API GainPilotPlugin<ChannelCount>::process(Steinberg::
   applyInputParameterChanges(data.inputParameterChanges);
   processor_.setParameters(parameterState_);
   processor_.setOfflineMode(data.processMode == Steinberg::Vst::kOffline);
-  const bool transportReset = resetForTransportDiscontinuity(data);
+  const auto transportReset = resetForTransportDiscontinuity(data);
+  static_cast<void>(transportReset);
 
   if (data.symbolicSampleSize == Steinberg::Vst::kSample32) {
     auto** input =
@@ -339,7 +293,6 @@ Steinberg::tresult PLUGIN_API GainPilotPlugin<ChannelCount>::process(Steinberg::
   }
 
   pushMeterOutput(data.outputParameterChanges);
-  traceProcessState(data, transportReset);
   return Steinberg::kResultOk;
 }
 
@@ -364,8 +317,6 @@ Steinberg::tresult PLUGIN_API GainPilotPlugin<ChannelCount>::setState(Steinberg:
   parameterState_.set(ParamId::meterValue, -70.0f);
   processor_.setParameters(parameterState_);
   lastProjectTimeSamples_.reset();
-  traceBlocksRemaining_ = kTraceBlockBudget;
-  traceMessage("setState");
   return Steinberg::kResultOk;
 }
 

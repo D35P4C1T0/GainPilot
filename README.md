@@ -1,65 +1,153 @@
 # GainPilot
 
-GainPilot is a modern native clone of LUveler focused on faithful LUFS-based
-auto-leveling with a shared C++ DSP core and native VST3/LV2 wrappers.
+GainPilot is a native loudness auto-leveler built around
+BS.1770 / EBU-R128 loudness workflows. It uses a shared C++ DSP core with
+native `VST3` and `LV2` wrappers, targets Windows and Linux, and focuses on
+practical program loudness control with true-peak protection.
 
-Current version: `0.1.0`
+## Status
 
-Current repository status:
+This repository is usable and builds locally, but it should still be treated as
+an actively evolving project rather than a finished 1.0 release.
 
-- Shared DSP core scaffold is in place.
-- Mono and stereo LV2 audio plugins build locally on Linux.
-- LV2 includes a native GTK3 UI with the input LUFS meter and grouped controls.
-- Mono and stereo VST3 plugin entries build from one bundle when the Steinberg
-  SDK is present at `external/vst3sdk`.
-- VST3 includes a bundled custom editor with the input LUFS meter and grouped
-  control layout.
+Current scope:
 
-## Build
+- Native `VST3`
+  - Windows: custom wxWidgets editor
+  - Linux: generic host UI fallback
+- Native `LV2`
+  - Linux: custom GTK3 UI
+- Mono and stereo plugin variants
+- Shared DSP core across formats
+- BS.1770 / EBU-R128 loudness metering
+- True-peak limiting
+- Cross-format state serialization
+- GitHub Actions packaging for Windows and Linux
+
+## Features
+
+- Target-based loudness auto-leveling
+- Input loudness meter with `Momentary`, `Short-Term`, and `Integrated` modes
+- True-peak ceiling control
+- Configurable correction high/low behavior
+- Mono and stereo builds with shared behavior
+- LV2 state save/restore
+- VST3 and LV2 artifact packaging from CMake/CPack
+
+## Build Requirements
+
+Core requirements:
+
+- CMake `3.25+`
+- C++20 compiler
+
+Linux:
+
+- `pkg-config`
+- `libebur128`
+- `lv2`
+- `gtk+-3.0`
+- optional: `wxWidgets` if you want to build the shared Windows-oriented UI
+
+Windows:
+
+- Visual Studio 2022 or another C++20-capable toolchain
+- `wxWidgets` for the custom VST3 editor
+
+VST3:
+
+- Steinberg VST3 SDK checked out at `external/vst3sdk`
+
+## Quick Start
+
+Clone the VST3 SDK into the expected location:
+
+```sh
+git clone --depth 1 --recurse-submodules https://github.com/steinbergmedia/vst3sdk external/vst3sdk
+```
+
+Configure and build:
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ```
 
-To install the built plugins into a custom prefix:
+Run the local tests:
+
+```sh
+ctest --test-dir build --output-on-failure
+```
+
+Install into a staging prefix:
 
 ```sh
 cmake --install build --prefix "$HOME/.local"
 ```
 
-On Linux this stages:
+Typical install layout:
 
-- `lib/lv2/*.lv2`
-- `lib/vst3/GainPilot.vst3`
+- Linux
+  - `lib/lv2/*.lv2`
+  - `lib/vst3/GainPilot.vst3`
+- Windows
+  - `VST3/GainPilot.vst3`
 
-On Windows this stages:
-
-- `VST3/GainPilot.vst3`
-
-To generate distributable packages from the install rules:
+Generate distributable archives:
 
 ```sh
 cpack --config build/CPackConfig.cmake
 ```
 
-## Release Notes
+## CMake Options
 
-See [CHANGELOG.md](/home/matteo/Documents/prog/lv2/lufs_leveler/CHANGELOG.md) for versioned release notes.
+- `GAINPILOT_ENABLE_LV2`
+- `GAINPILOT_ENABLE_LV2_UI`
+- `GAINPILOT_ENABLE_TESTS`
+- `GAINPILOT_ENABLE_WX_UI`
+- `GAINPILOT_ENABLE_GTK_UI`
+- `GAINPILOT_VST3_SDK_PATH`
 
-## VST3 SDK
+## Project Layout
 
-The project expects the Steinberg VST3 SDK at `external/vst3sdk`.
-The CI workflow clones it with submodules on demand. Local builds can do the same:
+- `include/`
+  Public headers and shared interfaces
+- `src/dsp/`
+  Shared DSP implementation
+- `src/vst3/`
+  Native VST3 wrapper and controller
+- `src/lv2/`
+  Native LV2 wrapper and UI bridge
+- `src/ui/`
+  Shared editor code
+- `tests/`
+  Smoke tests
 
-```sh
-git clone --depth 1 --recurse-submodules https://github.com/steinbergmedia/vst3sdk external/vst3sdk
-```
+## CI and Packaging
 
-## Scope
+GitHub Actions builds:
 
-- Mono and stereo plugin variants
-- BS.1770 / EBU loudness metering
-- Stereo-linked gain computer
-- Lookahead true-peak limiting
-- Cross-format parameter/state model
+- Linux packages and staged install trees
+- Windows packages and staged install trees
+
+Artifacts are produced as archives from the CMake install layout rather than
+raw build folders.
+
+## Known Notes
+
+- The Linux `VST3` build currently relies on the host's generic UI instead of a
+  custom editor.
+- The Steinberg VST3 SDK is not redistributed with this repository.
+- `reference/` is ignored and is not part of the public source tree.
+
+## Contributing
+
+See `CONTRIBUTING.md`.
+
+## License
+
+MIT. See `LICENSE`.
+
+## Changelog
+
+Versioned changes are tracked in `CHANGELOG.md`.

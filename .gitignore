@@ -5,3 +5,4 @@ external/vst3sdk/
 *.vst3/
 *.zip
 reference/
+gainpilot.log
