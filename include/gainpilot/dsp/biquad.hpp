@@ -4,6 +4,8 @@
 
 namespace gainpilot::dsp {
 
+inline constexpr double kPi = 3.14159265358979323846;
+
 struct BiquadCoefficients {
   double b0{};
   double b1{};
@@ -36,7 +38,7 @@ private:
 };
 
 [[nodiscard]] inline BiquadCoefficients makeHighPass(double sampleRate, double cutoffHz, double q) {
-  const double w0 = 2.0 * M_PI * cutoffHz / sampleRate;
+  const double w0 = 2.0 * kPi * cutoffHz / sampleRate;
   const double cosw0 = std::cos(w0);
   const double sinw0 = std::sin(w0);
   const double alpha = sinw0 / (2.0 * q);
@@ -53,7 +55,7 @@ private:
 
 [[nodiscard]] inline BiquadCoefficients makeHighShelf(double sampleRate, double cutoffHz, double gainDb, double slope) {
   const double a = std::pow(10.0, gainDb / 40.0);
-  const double w0 = 2.0 * M_PI * cutoffHz / sampleRate;
+  const double w0 = 2.0 * kPi * cutoffHz / sampleRate;
   const double cosw0 = std::cos(w0);
   const double sinw0 = std::sin(w0);
   const double alpha = sinw0 / 2.0 * std::sqrt((a + 1.0 / a) * (1.0 / slope - 1.0) + 2.0);

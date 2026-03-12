@@ -81,6 +81,8 @@ float processAndMeasureIntegrated(gainpilot::ParameterState state,
 }  // namespace
 
 int main() {
+  constexpr float kPi = 3.14159265358979323846f;
+
   gainpilot::dsp::GainPilotProcessor processor;
   processor.prepare(48000.0, 2, 256);
 
@@ -219,8 +221,7 @@ int main() {
   float limiterInFrame[2]{};
   float limiterOutFrame[2]{};
   for (std::size_t i = 0; i < kLimiterFrames; ++i) {
-    const float sample =
-        0.97f * std::sin(2.0f * static_cast<float>(M_PI) * 19000.0f * static_cast<float>(i) / 48000.0f);
+    const float sample = 0.97f * std::sin(2.0f * kPi * 19000.0f * static_cast<float>(i) / 48000.0f);
     limiterInFrame[0] = sample;
     limiterInFrame[1] = sample;
     limiter.processFrame(limiterInFrame, limiterOutFrame, 1.5f);
