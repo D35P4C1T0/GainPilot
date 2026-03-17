@@ -34,6 +34,27 @@ jobs:
           name: release-linux-assets
           path: build/packages/*
 
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Fetch VST3 SDK
+        run: git clone --depth 1 --recurse-submodules https://github.com/steinbergmedia/vst3sdk external/vst3sdk
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DGAINPILOT_ENABLE_LV2=OFF
+      - name: Build
+        run: cmake --build build --config Release
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+      - name: Stage install tree
+        run: cmake --install build --prefix "$PWD/stage"
+      - name: Generate packages
+        run: cpack --config build/CPackConfig.cmake
+      - uses: actions/upload-artifact@v6
+        with:
+          name: release-macos-assets
+          path: build/packages/*
+
   windows:
     runs-on: windows-2022
     steps:
@@ -71,6 +92,7 @@ jobs:
     runs-on: ubuntu-24.04
     needs:
       - linux
+      - macos
       - windows
     steps:
       - uses: actions/download-artifact@v5
@@ -83,4 +105,5 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           generate_release_notes: true
+          overwrite_files: true
           files: release-assets/*
