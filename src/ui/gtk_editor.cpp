@@ -88,6 +88,17 @@ void ensureGtkCss() {
 
 std::once_flag gGtkInitOnce;
 bool gGtkInitOk = false;
+constexpr std::array<const char*, 4> kCorrMixModeLabels{
+    "Linear / Linear",
+    "Linear / Log",
+    "Log / Linear",
+    "Log / Log",
+};
+constexpr std::array<const char*, 3> kMeterModeLabels{
+    "Momentary",
+    "Short-Term",
+    "Integrated",
+};
 
 }  // namespace
 
