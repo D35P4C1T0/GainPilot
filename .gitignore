@@ -1,4 +1,6 @@
 build/
+build-*/
+build_*/
 dist/
 external/vst3sdk/
 *.lv2/
@@ -6,3 +8,4 @@ external/vst3sdk/
 *.zip
 reference/
 gainpilot.log
+.DS_Store

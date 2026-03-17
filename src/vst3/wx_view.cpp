@@ -17,15 +17,10 @@ namespace gainpilot::vst3 {
 namespace {
 
 const Steinberg::ViewRect kDefaultViewRect{0, 0, 860, 520};
-constexpr std::array<ParamId, 9> kUiParameters{
+constexpr std::array<ParamId, 4> kUiParameters{
     ParamId::targetLevel,
     ParamId::truePeak,
     ParamId::maxGain,
-    ParamId::inputLevel,
-    ParamId::correctionHigh,
-    ParamId::correctionLow,
-    ParamId::corrMixMode,
-    ParamId::meterMode,
     ParamId::meterValue,
 };
 
@@ -42,6 +37,9 @@ Steinberg::tresult PLUGIN_API GainPilotWxView::isPlatformTypeSupported(Steinberg
 #if defined(_WIN32)
   return Steinberg::FIDStringsEqual(type, Steinberg::kPlatformTypeHWND) ? Steinberg::kResultTrue
                                                                          : Steinberg::kResultFalse;
+#elif defined(__APPLE__)
+  return Steinberg::FIDStringsEqual(type, Steinberg::kPlatformTypeNSView) ? Steinberg::kResultTrue
+                                                                           : Steinberg::kResultFalse;
 #elif defined(__linux__)
   return Steinberg::FIDStringsEqual(type, Steinberg::kPlatformTypeX11EmbedWindowID) ? Steinberg::kResultTrue
                                                                                       : Steinberg::kResultFalse;
@@ -124,6 +122,10 @@ bool GainPilotWxView::createHostContainer(void* parent, Steinberg::FIDString typ
 
 #if defined(_WIN32)
   if (Steinberg::FIDStringsEqual(type, Steinberg::kPlatformTypeHWND)) {
+    return container_->Create(reinterpret_cast<wxNativeContainerWindowHandle>(parent));
+  }
+#elif defined(__APPLE__)
+  if (Steinberg::FIDStringsEqual(type, Steinberg::kPlatformTypeNSView)) {
     return container_->Create(reinterpret_cast<wxNativeContainerWindowHandle>(parent));
   }
 #elif defined(__linux__)

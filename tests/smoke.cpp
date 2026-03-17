@@ -161,9 +161,34 @@ int main() {
   legacyFreezeLoose.set(gainpilot::ParamId::freezeLevel, -60.0f);
   const float looseIntegrated = processAndMeasureIntegrated(legacyFreezeLoose, dynLeft, dynRight);
 
-  auto legacyFreezeHot = dynamicState;
+  constexpr std::size_t kFreezeFrames = 48000 * 24;
+  std::vector<float> freezeLeft(kFreezeFrames, 0.0f);
+  std::vector<float> freezeRight(kFreezeFrames, 0.0f);
+  for (std::size_t i = 0; i < kFreezeFrames; ++i) {
+    const float carrier = std::sin(static_cast<float>(i) * 0.012f);
+    const std::size_t section = i / (48000 * 8);
+    const float amplitude = section == 1 ? 0.020f : 0.160f;
+    freezeLeft[i] = amplitude * carrier;
+    freezeRight[i] = amplitude * carrier;
+  }
+
+  const float freezeInputIntegrated = measureIntegratedLufs(freezeLeft, freezeRight);
+  gainpilot::ParameterState freezeState;
+  freezeState.set(gainpilot::ParamId::inputLevel, freezeInputIntegrated);
+  freezeState.set(gainpilot::ParamId::targetLevel, std::min(-14.0f, freezeInputIntegrated + 4.0f));
+  freezeState.set(gainpilot::ParamId::truePeak, -1.0f);
+  freezeState.set(gainpilot::ParamId::maxGain, 20.0f);
+  freezeState.set(gainpilot::ParamId::correctionHigh, 100.0f);
+  freezeState.set(gainpilot::ParamId::correctionLow, 100.0f);
+  freezeState.set(gainpilot::ParamId::corrMixMode, 0.0f);
+
+  auto freezeLooseState = freezeState;
+  freezeLooseState.set(gainpilot::ParamId::freezeLevel, -60.0f);
+  const float freezeLooseIntegrated = processAndMeasureIntegrated(freezeLooseState, freezeLeft, freezeRight);
+
+  auto legacyFreezeHot = freezeState;
   legacyFreezeHot.set(gainpilot::ParamId::freezeLevel, -20.0f);
-  const float hotIntegrated = processAndMeasureIntegrated(legacyFreezeHot, dynLeft, dynRight);
+  const float hotIntegrated = processAndMeasureIntegrated(legacyFreezeHot, freezeLeft, freezeRight);
 
   std::vector<float> longDynLeft(48000 * 30, 0.0f);
   std::vector<float> longDynRight(48000 * 30, 0.0f);
@@ -186,12 +211,16 @@ int main() {
     std::cerr << "Leveler misses the target too much on dynamic program material\n";
     return 1;
   }
-  if (std::abs(hotIntegrated - looseIntegrated) > 0.35f) {
+  if (std::abs(hotIntegrated - freezeLooseIntegrated) > 0.35f) {
     std::cerr << "Legacy Freeze still changes output loudness too much\n";
     return 1;
   }
   if (std::abs(defaultIntegrated - defaultState.get(gainpilot::ParamId::targetLevel)) > 3.0f) {
     std::cerr << "Default preset still misses integrated loudness target too much\n";
+    return 1;
+  }
+  if (std::abs(lowerTargetIntegrated - lowerTargetState.get(gainpilot::ParamId::targetLevel)) > 1.5f) {
+    std::cerr << "Lower target still misses integrated loudness target too much\n";
     return 1;
   }
   if (std::abs(defaultIntegrated - lowerTargetIntegrated) < 4.0f) {

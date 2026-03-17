@@ -18,6 +18,12 @@ inline constexpr char kPluginCategory[] = "Fx|Dynamics";
 inline const Steinberg::FUID kMonoProcessorCid(0xC3A0B497, 0x9C2B44A0, 0x9DBFD07B, 0x9D9D7CF1);
 inline const Steinberg::FUID kStereoProcessorCid(0x0A835034, 0x00E04B33, 0x874F4B24, 0xFBE9BB10);
 inline const Steinberg::FUID kControllerCid(0x1DD495EA, 0x45E54B92, 0xAAFE7B40, 0x51EB89BC);
+inline constexpr std::array kExportedVstParamIds{
+    ParamId::targetLevel,
+    ParamId::truePeak,
+    ParamId::maxGain,
+    ParamId::meterValue,
+};
 
 Steinberg::Vst::Parameter* makeParameter(ParamId id);
 
@@ -32,8 +38,5 @@ Steinberg::Vst::Parameter* makeParameter(ParamId id);
 [[nodiscard]] constexpr bool isAutomatableStateParam(ParamId id) {
   return id != ParamId::meterValue;
 }
-
-[[nodiscard]] const std::array<const char*, 4>& corrMixModeLabels();
-[[nodiscard]] const std::array<const char*, 3>& meterModeLabels();
 
 }  // namespace gainpilot::vst3

@@ -41,14 +41,14 @@ struct ParameterSpec {
 
 inline constexpr std::array kParameterSpecs{
     ParameterSpec{ParamId::targetLevel, "target_level", "Target Level", -30.0f, -10.0f, -16.0f, true, false},
-    ParameterSpec{ParamId::truePeak, "true_peak", "True Peak", -5.0f, 0.0f, -1.0f, true, false},
+    ParameterSpec{ParamId::truePeak, "true_peak", "True Peak", -10.0f, 0.0f, -1.0f, true, false},
     ParameterSpec{ParamId::maxGain, "max_gain", "Max Gain", -10.0f, 30.0f, 17.0f, true, false},
-    ParameterSpec{ParamId::freezeLevel, "freeze_level", "Legacy Freeze", -70.0f, -10.0f, -50.0f, true, false},
+    ParameterSpec{ParamId::freezeLevel, "freeze_level", "Freeze Level", -70.0f, -10.0f, -50.0f, true, false},
     ParameterSpec{ParamId::inputLevel, "input_level", "Input Level", -40.0f, 0.0f, -23.0f, true, false},
     ParameterSpec{ParamId::correctionHigh, "correction_high", "Correction High", 0.0f, 100.0f, 100.0f, true, false},
     ParameterSpec{ParamId::correctionLow, "correction_low", "Correction Low", 0.0f, 100.0f, 100.0f, true, false},
     ParameterSpec{ParamId::corrMixMode, "corr_mix_mode", "Corr Mix Mode", 0.0f, 3.0f, 0.0f, true, false},
-    ParameterSpec{ParamId::meterMode, "meter_mode", "Meter Mode", 0.0f, 2.0f, 0.0f, true, false},
+    ParameterSpec{ParamId::meterMode, "meter_mode", "Meter Mode", 0.0f, 2.0f, 2.0f, true, false},
     ParameterSpec{ParamId::meterReset, "meter_reset", "Meter Reset", 0.0f, 1.0f, 0.0f, true, false},
     ParameterSpec{ParamId::meterValue, "meter_value", "Meter Value", -70.0f, 10.0f, -70.0f, false, true},
 };

@@ -2,8 +2,8 @@
 
 GainPilot is a native loudness auto-leveler built around
 BS.1770 / EBU-R128 loudness workflows. It uses a shared C++ DSP core with
-native `VST3` and `LV2` wrappers, targets Windows and Linux, and focuses on
-practical program loudness control with true-peak protection.
+native `VST3` and `LV2` wrappers, targets Windows, Linux, and macOS for `VST3`,
+and focuses on practical program loudness control with true-peak protection.
 
 ## Status
 
@@ -15,6 +15,7 @@ Current scope:
 - Native `VST3`
   - Windows: custom wxWidgets editor
   - Linux: generic host UI fallback
+  - macOS: native Cocoa editor
 - Native `LV2`
   - Linux: custom GTK3 UI
 - Mono and stereo plugin variants
@@ -26,10 +27,10 @@ Current scope:
 
 ## Features
 
-- Target-based loudness auto-leveling
-- Input loudness meter with `Momentary`, `Short-Term`, and `Integrated` modes
+- Simplified main controls: `Target Level`, `True Peak`, `Max Gain`
+- Target-based loudness auto-leveling with learned input loudness
+- Input loudness meter with `Integrated` readout in the editor
 - True-peak ceiling control
-- Configurable correction high/low behavior
 - Mono and stereo builds with shared behavior
 - LV2 state save/restore
 - VST3 and LV2 artifact packaging from CMake/CPack
@@ -48,6 +49,11 @@ Linux:
 - `lv2`
 - `gtk+-3.0`
 - optional: `wxWidgets` if you want to build the shared Windows-oriented UI
+
+macOS:
+
+- Xcode Command Line Tools or another C++20-capable toolchain
+- full Xcode is recommended for the cleanest Apple build flow
 
 Windows:
 
@@ -90,6 +96,8 @@ Typical install layout:
 - Linux
   - `lib/lv2/*.lv2`
   - `lib/vst3/GainPilot.vst3`
+- macOS
+  - `Library/Audio/Plug-Ins/VST3/GainPilot.vst3`
 - Windows
   - `VST3/GainPilot.vst3`
 

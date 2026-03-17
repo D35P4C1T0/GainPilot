@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.25)
 
 project(
   GainPilot
-  VERSION 0.1.0
+  VERSION 0.1.1
   DESCRIPTION "LUFS auto-leveler with native LV2 and VST3 targets"
   LANGUAGES CXX
 )
@@ -15,8 +15,10 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 if(UNIX)
-  find_package(PkgConfig REQUIRED)
-  pkg_check_modules(EBUR128 IMPORTED_TARGET libebur128)
+  find_package(PkgConfig QUIET)
+  if(PkgConfig_FOUND)
+    pkg_check_modules(EBUR128 IMPORTED_TARGET libebur128)
+  endif()
 endif()
 
 configure_file(
@@ -25,11 +27,21 @@ configure_file(
   @ONLY
 )
 
-option(GAINPILOT_ENABLE_LV2 "Build LV2 plugin targets" ${UNIX})
-option(GAINPILOT_ENABLE_LV2_UI "Build LV2 GTK UI targets" ${UNIX})
+if(UNIX AND NOT APPLE)
+  set(GAINPILOT_ENABLE_LV2_DEFAULT ON)
+  set(GAINPILOT_ENABLE_LV2_UI_DEFAULT ON)
+  set(GAINPILOT_ENABLE_GTK_UI_DEFAULT ON)
+else()
+  set(GAINPILOT_ENABLE_LV2_DEFAULT OFF)
+  set(GAINPILOT_ENABLE_LV2_UI_DEFAULT OFF)
+  set(GAINPILOT_ENABLE_GTK_UI_DEFAULT OFF)
+endif()
+
+option(GAINPILOT_ENABLE_LV2 "Build LV2 plugin targets" ${GAINPILOT_ENABLE_LV2_DEFAULT})
+option(GAINPILOT_ENABLE_LV2_UI "Build LV2 GTK UI targets" ${GAINPILOT_ENABLE_LV2_UI_DEFAULT})
 option(GAINPILOT_ENABLE_TESTS "Build local smoke tests" ON)
 option(GAINPILOT_ENABLE_WX_UI "Build shared wxWidgets UI module" ON)
-option(GAINPILOT_ENABLE_GTK_UI "Build shared GTK UI module" ${UNIX})
+option(GAINPILOT_ENABLE_GTK_UI "Build shared GTK UI module" ${GAINPILOT_ENABLE_GTK_UI_DEFAULT})
 
 add_library(
   gainpilot_core
@@ -92,6 +104,9 @@ if(GAINPILOT_ENABLE_WX_UI)
 endif()
 
 if(GAINPILOT_ENABLE_GTK_UI)
+  if(NOT PkgConfig_FOUND)
+    find_package(PkgConfig REQUIRED)
+  endif()
   pkg_check_modules(GTK3 REQUIRED IMPORTED_TARGET gtk+-3.0)
 
   add_library(
@@ -117,6 +132,9 @@ if(GAINPILOT_ENABLE_GTK_UI)
 endif()
 
 if(GAINPILOT_ENABLE_LV2)
+  if(NOT PkgConfig_FOUND)
+    find_package(PkgConfig REQUIRED)
+  endif()
   pkg_check_modules(LV2 REQUIRED IMPORTED_TARGET lv2)
   if(GAINPILOT_ENABLE_LV2_UI)
     if(NOT TARGET gainpilot_gtk_ui)
@@ -276,8 +294,13 @@ if(EXISTS "${GAINPILOT_VST3_SDK_PATH}/CMakeLists.txt")
   if(WIN32 AND TARGET gainpilot_ui)
     list(APPEND gainpilot_vst3_sources src/vst3/wx_view.cpp)
   endif()
+  if(APPLE)
+    list(APPEND gainpilot_vst3_sources src/vst3/mac_view.mm)
+  endif()
   if(WIN32)
     list(APPEND gainpilot_vst3_sources ${GAINPILOT_VST3_SDK_PATH}/public.sdk/source/main/dllmain.cpp)
+  elseif(APPLE)
+    list(APPEND gainpilot_vst3_sources ${GAINPILOT_VST3_SDK_PATH}/public.sdk/source/main/macmain.cpp)
   elseif(UNIX AND NOT APPLE)
     list(APPEND gainpilot_vst3_sources ${GAINPILOT_VST3_SDK_PATH}/public.sdk/source/main/linuxmain.cpp)
   endif()
@@ -286,6 +309,11 @@ if(EXISTS "${GAINPILOT_VST3_SDK_PATH}/CMakeLists.txt")
   target_link_libraries(gainpilot_vst3 PRIVATE gainpilot_core sdk)
   if(WIN32 AND TARGET gainpilot_ui)
     target_link_libraries(gainpilot_vst3 PRIVATE gainpilot_ui)
+    target_compile_definitions(gainpilot_vst3 PRIVATE GAINPILOT_VST3_USE_WX_VIEW=1)
+  endif()
+  if(APPLE)
+    find_library(COCOA_FRAMEWORK Cocoa REQUIRED)
+    target_link_libraries(gainpilot_vst3 PRIVATE ${COCOA_FRAMEWORK})
   endif()
   target_include_directories(
     gainpilot_vst3
@@ -306,6 +334,8 @@ if(EXISTS "${GAINPILOT_VST3_SDK_PATH}/CMakeLists.txt")
 
   if(WIN32)
     set(GAINPILOT_VST3_INSTALL_DESTINATION ".")
+  elseif(APPLE)
+    set(GAINPILOT_VST3_INSTALL_DESTINATION "Library/Audio/Plug-Ins/VST3")
   else()
     set(GAINPILOT_VST3_INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/vst3")
   endif()
@@ -358,6 +388,9 @@ if(WIN32)
   set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
   set(CPACK_WIX_ROOT_FOLDER_ID "CommonFiles64Folder")
   set(CPACK_WIX_UPGRADE_GUID "B4D7C8D0-7F0B-4B99-8D4A-59B6C42A8D41")
+elseif(APPLE)
+  set(CPACK_GENERATOR "ZIP;TGZ")
+  set(CPACK_PACKAGE_FILE_NAME "gainpilot-${PROJECT_VERSION}-macos")
 else()
   set(CPACK_GENERATOR "ZIP;TGZ")
   set(CPACK_PACKAGE_FILE_NAME "gainpilot-${PROJECT_VERSION}-linux-x64")

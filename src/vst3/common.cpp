@@ -10,6 +10,13 @@ namespace gainpilot::vst3 {
 
 namespace {
 
+template <typename ParameterT>
+ParameterT* hideParameter(ParameterT* parameter) {
+  parameter->getInfo().flags &= ~Steinberg::Vst::ParameterInfo::kCanAutomate;
+  parameter->getInfo().flags |= Steinberg::Vst::ParameterInfo::kIsHidden;
+  return parameter;
+}
+
 class PercentParameter : public Steinberg::Vst::RangeParameter {
 public:
   PercentParameter(const Steinberg::Vst::TChar* title, Steinberg::Vst::ParamID tag, double defaultValue)
@@ -117,24 +124,18 @@ Steinberg::Vst::StringListParameter* makeEnumParameter(const Steinberg::Vst::TCh
 
 }  // namespace
 
-const std::array<const char*, 4>& corrMixModeLabels() {
-  static const std::array<const char*, 4> labels{
-      "Linear / Linear",
-      "Linear / Log",
-      "Log / Linear",
-      "Log / Log",
-  };
-  return labels;
-}
+const std::array<const char*, 4> kCorrMixModeLabels{
+    "Linear / Linear",
+    "Linear / Log",
+    "Log / Linear",
+    "Log / Log",
+};
 
-const std::array<const char*, 3>& meterModeLabels() {
-  static const std::array<const char*, 3> labels{
-      "Momentary",
-      "Short-Term",
-      "Integrated",
-  };
-  return labels;
-}
+const std::array<const char*, 3> kMeterModeLabels{
+    "Momentary",
+    "Short-Term",
+    "Integrated",
+};
 
 Steinberg::Vst::Parameter* makeParameter(ParamId id) {
   using Steinberg::Vst::Parameter;
@@ -145,24 +146,22 @@ Steinberg::Vst::Parameter* makeParameter(ParamId id) {
     case ParamId::targetLevel:
       return new LufsParameter(STR16("Target Level"), toVstParamId(id), -30.0, -10.0, -16.0);
     case ParamId::truePeak:
-      return new DbParameter(STR16("True Peak"), toVstParamId(id), -5.0, 0.0, -1.0);
+      return new DbParameter(STR16("True Peak"), toVstParamId(id), -10.0, 0.0, -1.0);
     case ParamId::maxGain:
       return new DbParameter(STR16("Max Gain"), toVstParamId(id), -10.0, 30.0, 17.0);
     case ParamId::freezeLevel: {
-      auto* parameter = new LufsParameter(STR16("Legacy Freeze"), toVstParamId(id), -70.0, -10.0, -50.0);
-      parameter->getInfo().flags = ParameterInfo::kIsHidden;
-      return parameter;
+      return hideParameter(new LufsParameter(STR16("Freeze Level"), toVstParamId(id), -70.0, -10.0, -50.0));
     }
     case ParamId::inputLevel:
-      return new SafeInputLevelParameter(STR16("Input Level"), toVstParamId(id), -40.0, 0.0, -23.0);
+      return hideParameter(new SafeInputLevelParameter(STR16("Input Level"), toVstParamId(id), -40.0, 0.0, -23.0));
     case ParamId::correctionHigh:
-      return new PercentParameter(STR16("Correction High"), toVstParamId(id), 100.0);
+      return hideParameter(new PercentParameter(STR16("Correction High"), toVstParamId(id), 100.0));
     case ParamId::correctionLow:
-      return new PercentParameter(STR16("Correction Low"), toVstParamId(id), 100.0);
+      return hideParameter(new PercentParameter(STR16("Correction Low"), toVstParamId(id), 100.0));
     case ParamId::corrMixMode:
-      return makeEnumParameter(STR16("Corr Mix Mode"), toVstParamId(id), corrMixModeLabels(), 0);
+      return hideParameter(makeEnumParameter(STR16("Corr Mix Mode"), toVstParamId(id), kCorrMixModeLabels, 0));
     case ParamId::meterMode:
-      return makeEnumParameter(STR16("Meter Mode"), toVstParamId(id), meterModeLabels(), 0);
+      return hideParameter(makeEnumParameter(STR16("Meter Mode"), toVstParamId(id), kMeterModeLabels, 2));
     case ParamId::meterReset: {
       auto* parameter = new RangeParameter(
           STR16("Reset Integrated"),
@@ -174,7 +173,7 @@ Steinberg::Vst::Parameter* makeParameter(ParamId id) {
           1,
           ParameterInfo::kCanAutomate | ParameterInfo::kIsList);
       parameter->setPrecision(0);
-      return parameter;
+      return hideParameter(parameter);
     }
     case ParamId::meterValue: {
       auto* parameter = new RangeParameter(
@@ -187,7 +186,7 @@ Steinberg::Vst::Parameter* makeParameter(ParamId id) {
           0,
           ParameterInfo::kIsReadOnly);
       parameter->setPrecision(2);
-      return parameter;
+      return hideParameter(parameter);
     }
     case ParamId::count:
       break;

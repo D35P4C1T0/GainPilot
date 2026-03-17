@@ -10,19 +10,6 @@ namespace gainpilot::ui {
 
 namespace {
 
-constexpr std::array<const char*, 4> kCorrMixModeLabels{
-    "Linear / Linear",
-    "Linear / Log",
-    "Log / Linear",
-    "Log / Log",
-};
-
-constexpr std::array<const char*, 3> kMeterModeLabels{
-    "Momentary",
-    "Short-Term",
-    "Integrated",
-};
-
 GtkWidget* createPanel() {
   auto* frame = gtk_frame_new(nullptr);
   gtk_frame_set_shadow_type(GTK_FRAME(frame), GTK_SHADOW_NONE);
@@ -138,16 +125,9 @@ void GainPilotGtkEditor::setParameterValue(ParamId id, float value) {
     return;
   }
 
-  if (id == ParamId::corrMixMode || id == ParamId::meterMode) {
-    updateChoice(id, static_cast<int>(std::lround(value)));
-    return;
+  if (id == ParamId::targetLevel || id == ParamId::truePeak || id == ParamId::maxGain) {
+    updateSlider(id, value);
   }
-
-  if (id == ParamId::freezeLevel || id == ParamId::meterReset) {
-    return;
-  }
-
-  updateSlider(id, value);
 }
 
 void GainPilotGtkEditor::setLatencyMilliseconds(float latencyMs) {
@@ -208,13 +188,6 @@ void GainPilotGtkEditor::buildMeterPanel(GtkWidget* panel) {
   meterValueLabel_ = createLabel("-70.00 LUFS", "gainpilot-readout", 0.5f);
   gtk_box_pack_start(GTK_BOX(box), meterValueLabel_, FALSE, FALSE, 0);
 
-  gtk_box_pack_start(GTK_BOX(box), createLabel("Meter Mode", "gainpilot-section", 0.0f), FALSE, FALSE, 0);
-  addCombo(box, ParamId::meterMode);
-
-  auto* resetButton = gtk_button_new_with_label("Reset Integrated");
-  g_signal_connect(resetButton, "clicked", G_CALLBACK(onResetClicked), this);
-  gtk_box_pack_start(GTK_BOX(box), resetButton, FALSE, FALSE, 0);
-
   latencyLabel_ = createLabel("Latency: --", "gainpilot-subtitle", 0.5f);
   gtk_box_pack_end(GTK_BOX(box), latencyLabel_, FALSE, FALSE, 0);
 }
@@ -247,17 +220,6 @@ void GainPilotGtkEditor::buildTargetPanel(GtkWidget* parent) {
   gtk_box_pack_start(GTK_BOX(box), createLabel("Level Targeting", "gainpilot-section"), FALSE, FALSE, 0);
 
   addSlider(box, ParamId::targetLevel);
-  addSlider(box, ParamId::inputLevel);
-
-  gtk_box_pack_start(GTK_BOX(box), createLabel("Mix Curves", "gainpilot-section"), FALSE, FALSE, 6);
-  addCombo(box, ParamId::corrMixMode);
-
-  gtk_box_pack_start(GTK_BOX(box),
-                     createLabel("Freeze is handled internally. The legacy parameter is kept for compatibility.",
-                                 "gainpilot-subtitle"),
-                     FALSE,
-                     FALSE,
-                     0);
 }
 
 void GainPilotGtkEditor::buildDynamicsPanel(GtkWidget* parent) {
@@ -270,8 +232,6 @@ void GainPilotGtkEditor::buildDynamicsPanel(GtkWidget* parent) {
 
   addSlider(box, ParamId::truePeak);
   addSlider(box, ParamId::maxGain);
-  addSlider(box, ParamId::correctionHigh);
-  addSlider(box, ParamId::correctionLow);
 }
 
 void GainPilotGtkEditor::addSlider(GtkWidget* parent, ParamId param) {
@@ -304,26 +264,6 @@ void GainPilotGtkEditor::addSlider(GtkWidget* parent, ParamId param) {
   binding.range = GTK_RANGE(scale);
 }
 
-void GainPilotGtkEditor::addCombo(GtkWidget* parent, ParamId param) {
-  auto* combo = gtk_combo_box_text_new();
-  if (param == ParamId::corrMixMode) {
-    for (const auto* label : kCorrMixModeLabels) {
-      gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), label);
-    }
-    corrMixModeCombo_ = GTK_COMBO_BOX(combo);
-  } else {
-    for (const auto* label : kMeterModeLabels) {
-      gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), label);
-    }
-    meterModeCombo_ = GTK_COMBO_BOX(combo);
-  }
-
-  gtk_combo_box_set_active(GTK_COMBO_BOX(combo), 0);
-  g_object_set_data(G_OBJECT(combo), "gainpilot-param", GUINT_TO_POINTER(static_cast<guint>(paramIndex(param))));
-  g_signal_connect(combo, "changed", G_CALLBACK(onComboChanged), this);
-  gtk_box_pack_start(GTK_BOX(parent), combo, FALSE, FALSE, 0);
-}
-
 void GainPilotGtkEditor::updateSlider(ParamId id, float value) {
   auto& binding = sliders_[sliderIndex(id)];
   if (binding.range == nullptr || binding.valueLabel == nullptr) {
@@ -338,12 +278,9 @@ void GainPilotGtkEditor::updateSlider(ParamId id, float value) {
 }
 
 void GainPilotGtkEditor::updateChoice(ParamId id, int value) {
+  (void)id;
+  (void)value;
   suppressEvents_ = true;
-  if (id == ParamId::corrMixMode && corrMixModeCombo_ != nullptr) {
-    gtk_combo_box_set_active(corrMixModeCombo_, std::clamp(value, 0, static_cast<int>(kCorrMixModeLabels.size() - 1)));
-  } else if (id == ParamId::meterMode && meterModeCombo_ != nullptr) {
-    gtk_combo_box_set_active(meterModeCombo_, std::clamp(value, 0, static_cast<int>(kMeterModeLabels.size() - 1)));
-  }
   suppressEvents_ = false;
 }
 
@@ -405,12 +342,6 @@ std::size_t GainPilotGtkEditor::sliderIndex(ParamId id) {
       return 1;
     case ParamId::maxGain:
       return 2;
-    case ParamId::inputLevel:
-      return 3;
-    case ParamId::correctionHigh:
-      return 4;
-    case ParamId::correctionLow:
-      return 5;
     default:
       return 0;
   }

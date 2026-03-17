@@ -34,10 +34,11 @@ public:
   [[nodiscard]] float currentOutputShortTermLufs() const;
 
 private:
-  [[nodiscard]] float computeDesiredGainDb(float detectorLufs, float currentGainDb) const;
+  [[nodiscard]] float computeDesiredTotalGainDb(float detectorLufs) const;
   [[nodiscard]] float correctionMix(bool useHighBranch) const;
   [[nodiscard]] float fixedGainDb() const;
-  [[nodiscard]] float autoHoldThresholdLufs() const;
+  [[nodiscard]] float effectiveInputLevelLufs() const;
+  [[nodiscard]] float freezeThresholdLufs() const;
   void updateMeterResetLatch();
   void updateAutoHoldGate(float detectorLufs);
 
@@ -50,15 +51,22 @@ private:
   float fastGainDb_{0.0f};
   float mediumGainDb_{0.0f};
   float slowGainDb_{0.0f};
+  float integratedTrimGainDb_{0.0f};
   float fastTargetGainDb_{0.0f};
   float mediumTargetGainDb_{0.0f};
   float slowTargetGainDb_{0.0f};
+  float integratedTrimTargetGainDb_{0.0f};
   float fastAttackCoeff_{0.0f};
   float fastReleaseCoeff_{0.0f};
   float mediumAttackCoeff_{0.0f};
   float mediumReleaseCoeff_{0.0f};
   float slowAttackCoeff_{0.0f};
   float slowReleaseCoeff_{0.0f};
+  float integratedTrimAttackCoeff_{0.0f};
+  float integratedTrimReleaseCoeff_{0.0f};
+  float learnedInputLevelLufs_{-23.0f};
+  float inputLevelAttackCoeff_{0.0f};
+  float inputLevelReleaseCoeff_{0.0f};
   float currentMeterValue_{-70.0f};
   float currentLatencySamples_{0.0f};
   bool offlineMode_{false};

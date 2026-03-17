@@ -81,11 +81,8 @@ namespace gainpilot::dsp {
 
 namespace {
 
-constexpr float kAutoHoldCloseHysteresisLufs = 2.0f;
-constexpr std::uint32_t kAutoHoldHops = 8;
-constexpr float kAutoHoldOffsetLufs = 27.0f;
-constexpr float kAutoHoldMinLufs = -60.0f;
-constexpr float kAutoHoldMaxLufs = -35.0f;
+constexpr float kFreezeCloseHysteresisLufs = 2.0f;
+constexpr std::uint32_t kFreezeHoldHops = 8;
 constexpr float kMinGainDb = -24.0f;
 constexpr float kFastTransientThresholdDb = 1.5f;
 constexpr float kFastMaxAttenuationDb = 6.0f;
@@ -93,8 +90,13 @@ constexpr float kMediumMaxAttenuationDb = 10.0f;
 constexpr float kMediumMaxGainDb = 10.0f;
 constexpr float kSlowMaxAttenuationDb = 6.0f;
 constexpr float kSlowMaxGainDb = 6.0f;
-constexpr float kSlowShortTermWeight = 0.75f;
-constexpr float kSlowIntegratedWeight = 0.25f;
+constexpr float kMediumMomentaryWeight = 0.65f;
+constexpr float kIntegratedTrimMaxDb = 8.0f;
+constexpr std::size_t kIntegratedTrimReadyBlocks = 30;
+constexpr std::size_t kInputLevelReadyBlocks = 30;
+constexpr float kAutoFreezeOffsetLufs = 27.0f;
+constexpr float kAutoFreezeMinLufs = -60.0f;
+constexpr float kAutoFreezeMaxLufs = -35.0f;
 
 float dbToLinear(float valueDb) {
   return std::pow(10.0f, valueDb / 20.0f);
@@ -102,15 +104,6 @@ float dbToLinear(float valueDb) {
 
 float makeCoeff(double sampleRate, float seconds) {
   return std::exp(-1.0f / (seconds * static_cast<float>(sampleRate)));
-}
-
-float curvedMix(float value, bool logarithmic) {
-  value = std::clamp(value, 0.0f, 1.0f);
-  if (!logarithmic) {
-    return value;
-  }
-
-  return value * value;
 }
 
 float smoothTowards(float current, float target, float attackCoeff, float releaseCoeff) {
@@ -133,10 +126,14 @@ void GainPilotProcessor::prepare(double sampleRate, std::size_t channelCount, st
   fastAttackCoeff_ = makeCoeff(sampleRate_, 0.015f);
   fastReleaseCoeff_ = makeCoeff(sampleRate_, 0.120f);
   mediumAttackCoeff_ = makeCoeff(sampleRate_, 0.120f);
-  mediumReleaseCoeff_ = makeCoeff(sampleRate_, 0.600f);
-  slowAttackCoeff_ = makeCoeff(sampleRate_, 0.500f);
-  slowReleaseCoeff_ = makeCoeff(sampleRate_, 2.500f);
-  autoHoldHops_ = kAutoHoldHops;
+  mediumReleaseCoeff_ = makeCoeff(sampleRate_, 1.200f);
+  slowAttackCoeff_ = makeCoeff(sampleRate_, 0.750f);
+  slowReleaseCoeff_ = makeCoeff(sampleRate_, 4.000f);
+  integratedTrimAttackCoeff_ = makeCoeff(sampleRate_, 2.000f);
+  integratedTrimReleaseCoeff_ = makeCoeff(sampleRate_, 10.000f);
+  inputLevelAttackCoeff_ = makeCoeff(sampleRate_, 3.000f);
+  inputLevelReleaseCoeff_ = makeCoeff(sampleRate_, 12.000f);
+  autoHoldHops_ = kFreezeHoldHops;
   (void) maxBlockSize;
   reset();
 }
@@ -148,9 +145,12 @@ void GainPilotProcessor::reset() {
   fastGainDb_ = 0.0f;
   mediumGainDb_ = 0.0f;
   slowGainDb_ = 0.0f;
+  integratedTrimGainDb_ = 0.0f;
   fastTargetGainDb_ = 0.0f;
   mediumTargetGainDb_ = 0.0f;
   slowTargetGainDb_ = 0.0f;
+  integratedTrimTargetGainDb_ = 0.0f;
+  learnedInputLevelLufs_ = parameters_.get(ParamId::inputLevel);
   currentMeterValue_ = -70.0f;
   currentLatencySamples_ = static_cast<float>(limiter_.latencySamples());
   resetWasHigh_ = false;
@@ -171,30 +171,33 @@ std::size_t GainPilotProcessor::latencySamples() const {
 }
 
 float GainPilotProcessor::fixedGainDb() const {
-  return parameters_.get(ParamId::targetLevel) - parameters_.get(ParamId::inputLevel);
+  return parameters_.get(ParamId::targetLevel) - effectiveInputLevelLufs();
 }
 
-float GainPilotProcessor::autoHoldThresholdLufs() const {
-  const float derivedThreshold = parameters_.get(ParamId::inputLevel) - kAutoHoldOffsetLufs;
-  return std::clamp(derivedThreshold, kAutoHoldMinLufs, kAutoHoldMaxLufs);
+float GainPilotProcessor::effectiveInputLevelLufs() const {
+  if (meter_.integratedBlockCount() >= kInputLevelReadyBlocks) {
+    return learnedInputLevelLufs_;
+  }
+  return parameters_.get(ParamId::inputLevel);
+}
+
+float GainPilotProcessor::freezeThresholdLufs() const {
+  return std::clamp(effectiveInputLevelLufs() - kAutoFreezeOffsetLufs, kAutoFreezeMinLufs, kAutoFreezeMaxLufs);
 }
 
 float GainPilotProcessor::correctionMix(bool useHighBranch) const {
-  const float correctionPercent = useHighBranch ? parameters_.get(ParamId::correctionHigh) : parameters_.get(ParamId::correctionLow);
-  const int mode = static_cast<int>(parameters_.get(ParamId::corrMixMode));
-  const bool logForHigh = mode == 2 || mode == 3;
-  const bool logForLow = mode == 1 || mode == 3;
-  return curvedMix(correctionPercent / 100.0f, useHighBranch ? logForHigh : logForLow);
+  (void)useHighBranch;
+  return 1.0f;
 }
 
-float GainPilotProcessor::computeDesiredGainDb(float detectorLufs, float currentGainDb) const {
-  const float targetLevel = parameters_.get(ParamId::targetLevel);
-  const float errorDb = targetLevel - detectorLufs;
-  const bool useHighBranch = detectorLufs >= targetLevel;
+float GainPilotProcessor::computeDesiredTotalGainDb(float detectorLufs) const {
+  const float baselineGainDb = std::clamp(fixedGainDb(), kMinGainDb, parameters_.get(ParamId::maxGain));
+  const float inputReferenceLufs = effectiveInputLevelLufs();
+  const float controlledGainDb = parameters_.get(ParamId::targetLevel) - detectorLufs;
+  const bool useHighBranch = detectorLufs >= inputReferenceLufs;
   const float mix = correctionMix(useHighBranch);
-  float desiredGainDb = currentGainDb + mix * errorDb;
-  desiredGainDb = std::min(desiredGainDb, parameters_.get(ParamId::maxGain));
-  return desiredGainDb;
+  const float desiredGainDb = baselineGainDb + mix * (controlledGainDb - baselineGainDb);
+  return std::clamp(desiredGainDb, kMinGainDb, parameters_.get(ParamId::maxGain));
 }
 
 void GainPilotProcessor::updateMeterResetLatch() {
@@ -207,7 +210,7 @@ void GainPilotProcessor::updateMeterResetLatch() {
 }
 
 void GainPilotProcessor::updateAutoHoldGate(float detectorLufs) {
-  const float holdThreshold = autoHoldThresholdLufs();
+  const float holdThreshold = freezeThresholdLufs();
 
   if (detectorLufs >= holdThreshold) {
     autoHoldGateOpen_ = true;
@@ -215,7 +218,7 @@ void GainPilotProcessor::updateAutoHoldGate(float detectorLufs) {
     return;
   }
 
-  if (autoHoldGateOpen_ && detectorLufs >= holdThreshold - kAutoHoldCloseHysteresisLufs) {
+  if (autoHoldGateOpen_ && detectorLufs >= holdThreshold - kFreezeCloseHysteresisLufs) {
     autoHoldHopsRemaining_ = autoHoldHops_;
     return;
   }
@@ -238,6 +241,7 @@ void GainPilotProcessor::process(const ProcessBuffer& buffer) {
     fastTargetGainDb_ = 0.0f;
     mediumTargetGainDb_ = 0.0f;
     slowTargetGainDb_ = 0.0f;
+    integratedTrimTargetGainDb_ = 0.0f;
   }
 
   for (std::size_t frame = 0; frame < buffer.frames; ++frame) {
@@ -248,56 +252,48 @@ void GainPilotProcessor::process(const ProcessBuffer& buffer) {
     const float baselineGainDb = std::clamp(fixedGainDb(), kMinGainDb, parameters_.get(ParamId::maxGain));
     const bool inputControlHop = meter_.processFrame(frameInput_.data());
     if (!limiterOnly && inputControlHop) {
+      if (meter_.integratedBlockCount() >= kInputLevelReadyBlocks) {
+        learnedInputLevelLufs_ = smoothTowards(
+            learnedInputLevelLufs_, meter_.integratedLufs(), inputLevelAttackCoeff_, inputLevelReleaseCoeff_);
+      }
+
       const float inputSlowDetectorLufs = meter_.controlLufs();
       const float inputFastDetectorLufs = meter_.momentaryLufs();
-      const bool outputShortTermReady = outputMeter_.shortTermReady();
-      const bool outputIntegratedReady = outputMeter_.integratedBlockCount() >= 10;
+      const float inputReferenceLufs = effectiveInputLevelLufs();
+      const float highMix = correctionMix(true);
+      const float targetLevel = parameters_.get(ParamId::targetLevel);
+      const float mediumDetectorLufs =
+          inputSlowDetectorLufs + kMediumMomentaryWeight * (inputFastDetectorLufs - inputSlowDetectorLufs);
+      const float slowDesiredTotalGainDb = computeDesiredTotalGainDb(inputSlowDetectorLufs);
+      const float mediumDesiredTotalGainDb = computeDesiredTotalGainDb(mediumDetectorLufs);
 
       updateAutoHoldGate(inputSlowDetectorLufs);
 
-      const float inputReferenceLufs = parameters_.get(ParamId::inputLevel);
-      const float targetLevel = parameters_.get(ParamId::targetLevel);
-      const float highMix = correctionMix(true);
-      const float lowMix = correctionMix(false);
-
       const float fastExcessDb = inputFastDetectorLufs - std::max(inputSlowDetectorLufs, inputReferenceLufs);
-      const float fastMix = highMix;
       fastTargetGainDb_ =
-          -fastMix * std::clamp(fastExcessDb - kFastTransientThresholdDb, 0.0f, kFastMaxAttenuationDb);
+          -highMix * std::clamp(fastExcessDb - kFastTransientThresholdDb, 0.0f, kFastMaxAttenuationDb);
 
-      const float mediumErrorDb = inputReferenceLufs - inputSlowDetectorLufs;
-      if (mediumErrorDb >= 0.0f) {
-        mediumTargetGainDb_ =
-            std::clamp(mediumErrorDb * lowMix, 0.0f, kMediumMaxGainDb * std::max(0.2f, lowMix));
+      slowTargetGainDb_ =
+          std::clamp(slowDesiredTotalGainDb - baselineGainDb, -kSlowMaxAttenuationDb, kSlowMaxGainDb);
+      const float mediumResidualGainDb = mediumDesiredTotalGainDb - (baselineGainDb + slowTargetGainDb_);
+      mediumTargetGainDb_ = std::clamp(mediumResidualGainDb, -kMediumMaxAttenuationDb, kMediumMaxGainDb);
+      if (outputMeter_.integratedBlockCount() >= kIntegratedTrimReadyBlocks) {
+        const float integratedErrorDb = targetLevel - outputMeter_.integratedLufs();
+        integratedTrimTargetGainDb_ = std::clamp(integratedErrorDb, -kIntegratedTrimMaxDb, kIntegratedTrimMaxDb);
       } else {
-        mediumTargetGainDb_ =
-            -std::clamp((-mediumErrorDb) * highMix, 0.0f, kMediumMaxAttenuationDb * std::max(0.2f, highMix));
+        integratedTrimTargetGainDb_ = 0.0f;
       }
 
-      float slowReferenceLufs = inputSlowDetectorLufs + baselineGainDb + fastGainDb_ + mediumGainDb_;
-      if (outputShortTermReady) {
-        slowReferenceLufs = outputMeter_.shortTermLufs();
-      }
-      const float slowIntegratedReferenceLufs =
-          outputIntegratedReady ? outputMeter_.integratedLufs() : slowReferenceLufs;
-      const float slowErrorDb = kSlowShortTermWeight * (targetLevel - slowReferenceLufs) +
-                                kSlowIntegratedWeight * (targetLevel - slowIntegratedReferenceLufs);
-      if (slowErrorDb >= 0.0f) {
-        slowTargetGainDb_ =
-            std::clamp(slowErrorDb * lowMix, 0.0f, kSlowMaxGainDb * std::max(0.2f, lowMix));
-      } else {
-        slowTargetGainDb_ =
-            -std::clamp((-slowErrorDb) * highMix, 0.0f, kSlowMaxAttenuationDb * std::max(0.2f, highMix));
-      }
-
-      const float currentTotalGainDb = baselineGainDb + fastGainDb_ + mediumGainDb_ + slowGainDb_;
-      const float targetTotalGainDb = baselineGainDb + fastTargetGainDb_ + mediumTargetGainDb_ + slowTargetGainDb_;
+      const float currentTotalGainDb =
+          baselineGainDb + fastGainDb_ + mediumGainDb_ + slowGainDb_ + integratedTrimGainDb_;
+      const float targetTotalGainDb = baselineGainDb + fastTargetGainDb_ + mediumTargetGainDb_ + slowTargetGainDb_ +
+                                      integratedTrimTargetGainDb_;
       if (!autoHoldGateOpen_ && targetTotalGainDb > currentTotalGainDb) {
-        const float allowedSlowTargetGainDb = std::min(slowTargetGainDb_, slowGainDb_);
-        slowTargetGainDb_ = allowedSlowTargetGainDb;
+        slowTargetGainDb_ += currentTotalGainDb - targetTotalGainDb;
       }
 
-      const float unclampedTotalTargetDb = baselineGainDb + fastTargetGainDb_ + mediumTargetGainDb_ + slowTargetGainDb_;
+      const float unclampedTotalTargetDb = baselineGainDb + fastTargetGainDb_ + mediumTargetGainDb_ + slowTargetGainDb_ +
+                                           integratedTrimTargetGainDb_;
       const float clampedTotalTargetDb = std::clamp(unclampedTotalTargetDb, kMinGainDb, parameters_.get(ParamId::maxGain));
       slowTargetGainDb_ += clampedTotalTargetDb - unclampedTotalTargetDb;
     }
@@ -305,9 +301,13 @@ void GainPilotProcessor::process(const ProcessBuffer& buffer) {
     fastGainDb_ = smoothTowards(fastGainDb_, fastTargetGainDb_, fastAttackCoeff_, fastReleaseCoeff_);
     mediumGainDb_ = smoothTowards(mediumGainDb_, mediumTargetGainDb_, mediumAttackCoeff_, mediumReleaseCoeff_);
     slowGainDb_ = smoothTowards(slowGainDb_, slowTargetGainDb_, slowAttackCoeff_, slowReleaseCoeff_);
+    integratedTrimGainDb_ = smoothTowards(
+        integratedTrimGainDb_, integratedTrimTargetGainDb_, integratedTrimAttackCoeff_, integratedTrimReleaseCoeff_);
 
-    const float totalGainDb =
-        std::clamp(baselineGainDb + fastGainDb_ + mediumGainDb_ + slowGainDb_, kMinGainDb, parameters_.get(ParamId::maxGain));
+    const float totalGainDb = std::clamp(
+        baselineGainDb + fastGainDb_ + mediumGainDb_ + slowGainDb_ + integratedTrimGainDb_,
+        kMinGainDb,
+        parameters_.get(ParamId::maxGain));
     limiter_.processFrame(frameInput_.data(), frameOutput_.data(), dbToLinear(totalGainDb));
     (void)outputMeter_.processFrame(frameOutput_.data());
 
@@ -328,7 +328,7 @@ float GainPilotProcessor::currentLatencySamples() const {
 }
 
 float GainPilotProcessor::currentAppliedGainDb() const {
-  return fixedGainDb() + fastGainDb_ + mediumGainDb_ + slowGainDb_;
+  return fixedGainDb() + fastGainDb_ + mediumGainDb_ + slowGainDb_ + integratedTrimGainDb_;
 }
 
 float GainPilotProcessor::currentInputShortTermLufs() const {

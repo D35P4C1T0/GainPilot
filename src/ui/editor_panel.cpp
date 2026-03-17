@@ -69,12 +69,9 @@ void GainPilotEditorPanel::setParameterValue(ParamId id, float value) {
     return;
   }
 
-  if (id == ParamId::corrMixMode || id == ParamId::meterMode) {
-    updateChoice(id, static_cast<int>(std::lround(value)));
-    return;
+  if (id == ParamId::targetLevel || id == ParamId::truePeak || id == ParamId::maxGain) {
+    updateSliderRow(id, value);
   }
-
-  updateSliderRow(id, value);
 }
 
 void GainPilotEditorPanel::setLatencyMilliseconds(float latencyMs) {
@@ -104,17 +101,6 @@ void GainPilotEditorPanel::buildUi() {
   meterValueLabel_ = makeLabel(meterPanel, "-70.00 LUFS", true, kAccent);
   meterSizer->Add(meterValueLabel_, 0, wxALIGN_CENTER_HORIZONTAL | wxBOTTOM, 12);
 
-  meterSizer->Add(makeLabel(meterPanel, "Mode", false, kSubtle), 0, wxLEFT | wxBOTTOM, 4);
-  meterModeChoice_ = new wxChoice(meterPanel, wxID_ANY);
-  for (const auto* label : kMeterModeLabels) {
-    meterModeChoice_->Append(label);
-  }
-  meterModeChoice_->SetSelection(0);
-  meterSizer->Add(meterModeChoice_, 0, wxEXPAND | wxBOTTOM, 10);
-
-  auto* resetButton = new wxButton(meterPanel, wxID_ANY, "Reset Integrated");
-  meterSizer->Add(resetButton, 0, wxEXPAND);
-
   auto* contentSizer = new wxBoxSizer(wxVERTICAL);
   auto* headerPanel = new wxPanel(this, wxID_ANY);
   auto* headerSizer = new wxBoxSizer(wxHORIZONTAL);
@@ -132,16 +118,7 @@ void GainPilotEditorPanel::buildUi() {
   targetPanel->SetSizer(targetSizer);
   targetSizer->Add(makeLabel(targetPanel, "Level Targeting", true), 0, wxBOTTOM, 10);
   addSliderRow(targetPanel, ParamId::targetLevel, "LUFS", 2);
-  addSliderRow(targetPanel, ParamId::inputLevel, "LUFS", 2);
-  targetSizer->AddSpacer(12);
-  targetSizer->Add(makeLabel(targetPanel, "Mix Curves", true), 0, wxBOTTOM, 8);
-  targetSizer->Add(makeLabel(targetPanel, "Corr Mix Mode", false, kSubtle), 0, wxBOTTOM, 4);
-  corrMixModeChoice_ = new wxChoice(targetPanel, wxID_ANY);
-  for (const auto* label : kCorrMixLabels) {
-    corrMixModeChoice_->Append(label);
-  }
-  corrMixModeChoice_->SetSelection(0);
-  targetSizer->Add(corrMixModeChoice_, 0, wxEXPAND | wxBOTTOM, 14);
+  targetSizer->AddStretchSpacer();
 
   auto* dynamicsPanel = new wxPanel(this, wxID_ANY);
   auto* dynamicsSizer = new wxBoxSizer(wxVERTICAL);
@@ -149,8 +126,6 @@ void GainPilotEditorPanel::buildUi() {
   dynamicsSizer->Add(makeLabel(dynamicsPanel, "Dynamics & Ceiling", true), 0, wxBOTTOM, 10);
   addSliderRow(dynamicsPanel, ParamId::truePeak, "dB", 2);
   addSliderRow(dynamicsPanel, ParamId::maxGain, "dB", 2);
-  addSliderRow(dynamicsPanel, ParamId::correctionHigh, "%", 1);
-  addSliderRow(dynamicsPanel, ParamId::correctionLow, "%", 1);
   dynamicsSizer->AddStretchSpacer();
   latencyLabel_ = makeLabel(dynamicsPanel, "Latency: 0.00 ms", false, kSubtle);
   dynamicsSizer->Add(latencyLabel_, 0, wxTOP, 10);
@@ -165,26 +140,6 @@ void GainPilotEditorPanel::buildUi() {
   root->Add(contentSizer, 1, wxEXPAND | wxALL, 14);
 
   SetSizer(root);
-
-  meterModeChoice_->Bind(wxEVT_CHOICE, [this](wxCommandEvent& event) {
-    if (suppressEvents_ || !callbacks_.setParameterValue) {
-      return;
-    }
-    callbacks_.setParameterValue(ParamId::meterMode, static_cast<float>(event.GetSelection()));
-  });
-
-  corrMixModeChoice_->Bind(wxEVT_CHOICE, [this](wxCommandEvent& event) {
-    if (suppressEvents_ || !callbacks_.setParameterValue) {
-      return;
-    }
-    callbacks_.setParameterValue(ParamId::corrMixMode, static_cast<float>(event.GetSelection()));
-  });
-
-  resetButton->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
-    if (callbacks_.resetIntegrated) {
-      callbacks_.resetIntegrated();
-    }
-  });
 
   updateMeter(values_[paramIndex(ParamId::meterValue)]);
   setLatencyMilliseconds(0.0f);

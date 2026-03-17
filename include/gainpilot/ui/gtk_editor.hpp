@@ -58,7 +58,7 @@ private:
   GtkComboBox* meterModeCombo_{nullptr};
   bool suppressEvents_{false};
   std::array<float, kNumParameters> values_{};
-  std::array<SliderBinding, 6> sliders_{};
+  std::array<SliderBinding, 3> sliders_{};
 };
 
 bool ensureGtkUiRuntime();
