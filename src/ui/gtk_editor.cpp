@@ -88,6 +88,10 @@ void ensureGtkCss() {
 
 std::once_flag gGtkInitOnce;
 bool gGtkInitOk = false;
+constexpr std::array<const char*, 2> kProgramModeLabels{
+    "Auto",
+    "Speech",
+};
 constexpr std::array<const char*, 4> kCorrMixModeLabels{
     "Linear / Linear",
     "Linear / Log",
