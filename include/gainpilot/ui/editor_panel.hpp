@@ -38,9 +38,11 @@ private:
   void buildUi();
   void applyTheme();
   void addSliderRow(wxWindow* parent, ParamId id, const char* unit, int precision, int scale = 100);
+  void addProgramModeChoice(wxWindow* parent);
   void updateSliderRow(ParamId id, float value);
   void updateChoice(ParamId id, int value);
   void updateMeter(float value);
+  void updateReadout(wxStaticText* label, ParamId id, float value);
 
   static int toSliderValue(ParamId id, float value, int scale);
   static float fromSliderValue(ParamId id, int sliderValue, int scale);
@@ -52,10 +54,13 @@ private:
   std::array<float, kNumParameters> values_{};
   std::array<SliderWidgets, kNumParameters> sliderRows_{};
   std::array<int, kNumParameters> sliderScales_{};
-  wxChoice* corrMixModeChoice_{nullptr};
-  wxChoice* meterModeChoice_{nullptr};
+  wxChoice* programModeChoice_{nullptr};
   wxGauge* meterGauge_{nullptr};
   wxStaticText* meterValueLabel_{nullptr};
+  wxStaticText* inputIntegratedLabel_{nullptr};
+  wxStaticText* outputIntegratedLabel_{nullptr};
+  wxStaticText* outputShortTermLabel_{nullptr};
+  wxStaticText* gainReductionLabel_{nullptr};
   wxStaticText* latencyLabel_{nullptr};
   bool suppressEvents_{false};
 };

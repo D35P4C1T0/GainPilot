@@ -16,6 +16,8 @@ inline constexpr std::array kStateParamIds{
     ParamId::targetLevel,
     ParamId::truePeak,
     ParamId::maxGain,
+    ParamId::inputTrim,
+    ParamId::programMode,
     ParamId::freezeLevel,
     ParamId::inputLevel,
     ParamId::correctionHigh,
@@ -27,6 +29,17 @@ inline constexpr std::array kStateParamIds{
 namespace detail {
 
 inline constexpr std::array<char, 4> kStateMagic{'G', 'P', 'S', '1'};
+inline constexpr std::array kStateParamIdsV1{
+    ParamId::targetLevel,
+    ParamId::truePeak,
+    ParamId::maxGain,
+    ParamId::freezeLevel,
+    ParamId::inputLevel,
+    ParamId::correctionHigh,
+    ParamId::correctionLow,
+    ParamId::corrMixMode,
+    ParamId::meterMode,
+};
 
 template <typename T>
 void appendBytes(std::vector<std::byte>& out, const T& value) {
@@ -55,7 +68,7 @@ inline std::vector<std::byte> serializeState(const ParameterState& state) {
     bytes.push_back(static_cast<std::byte>(value));
   }
 
-  const std::uint32_t version = 1;
+  const std::uint32_t version = 2;
   const std::uint32_t count = static_cast<std::uint32_t>(kStateParamIds.size());
   detail::appendBytes(bytes, version);
   detail::appendBytes(bytes, count);
@@ -82,11 +95,22 @@ inline std::optional<ParameterState> deserializeState(std::span<const std::byte>
     return std::nullopt;
   }
 
-  if (version != 1 || count != kStateParamIds.size()) {
+  ParameterState state;
+  if (version == 1 && count == detail::kStateParamIdsV1.size()) {
+    for (const ParamId id : detail::kStateParamIdsV1) {
+      float value = 0.0f;
+      if (!detail::readBytes(data, offset, value)) {
+        return std::nullopt;
+      }
+      state.set(id, value);
+    }
+    return state;
+  }
+
+  if (version != 2 || count != kStateParamIds.size()) {
     return std::nullopt;
   }
 
-  ParameterState state;
   for (const ParamId id : kStateParamIds) {
     float value = 0.0f;
     if (!detail::readBytes(data, offset, value)) {

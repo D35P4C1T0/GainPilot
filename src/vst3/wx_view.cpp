@@ -17,11 +17,17 @@ namespace gainpilot::vst3 {
 namespace {
 
 const Steinberg::ViewRect kDefaultViewRect{0, 0, 860, 520};
-constexpr std::array<ParamId, 4> kUiParameters{
+constexpr std::array<ParamId, 10> kUiParameters{
     ParamId::targetLevel,
     ParamId::truePeak,
     ParamId::maxGain,
+    ParamId::inputTrim,
+    ParamId::programMode,
     ParamId::meterValue,
+    ParamId::inputIntegratedValue,
+    ParamId::outputIntegratedValue,
+    ParamId::outputShortTermValue,
+    ParamId::gainReductionValue,
 };
 
 }  // namespace
@@ -162,11 +168,7 @@ void GainPilotWxView::refreshFromModel() {
   }
 
   for (const auto id : kUiParameters) {
-    if (id == ParamId::meterValue) {
-      if (callbacks_.getMeterValue) {
-        panel_->setParameterValue(id, callbacks_.getMeterValue());
-      }
-    } else if (callbacks_.getParameterValue) {
+    if (callbacks_.getParameterValue) {
       panel_->setParameterValue(id, callbacks_.getParameterValue(id));
     }
   }

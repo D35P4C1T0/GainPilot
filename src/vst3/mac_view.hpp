@@ -13,6 +13,7 @@ struct MacViewCallbacks {
   std::function<float()> getMeterValue;
   std::function<float()> getLatencyMilliseconds;
   std::function<void(ParamId, float)> setParameterValue;
+  std::function<void()> resetIntegrated;
 };
 
 class GainPilotMacView final : public Steinberg::CPluginView {
@@ -26,12 +27,14 @@ public:
   Steinberg::tresult PLUGIN_API onSize(Steinberg::ViewRect* newSize) SMTG_OVERRIDE;
 
   void handleSliderChanged(ParamId id, float value);
+  void handleResetClicked();
   void refreshFromModel();
 
 private:
   struct Impl;
 
   void destroyUi();
+  void layoutUi(float width, float height);
 
   MacViewCallbacks callbacks_;
   Impl* impl_{nullptr};

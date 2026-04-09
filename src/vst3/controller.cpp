@@ -131,6 +131,10 @@ Steinberg::IPlugView* PLUGIN_API GainPilotController::createView(Steinberg::FIDS
           [this](ParamId id, float value) {
             performPlainParameterEdit(*this, id, value);
           },
+      .resetIntegrated =
+          [this]() {
+            triggerIntegratedReset(*this);
+          },
   }));
 #elif GAINPILOT_VST3_USE_WX_VIEW
   return static_cast<Steinberg::IPlugView*>(new GainPilotWxView({
@@ -177,6 +181,10 @@ gainpilot::ParameterState GainPilotController::snapshotState() {
   }
   state.set(ParamId::meterReset, 0.0f);
   state.set(ParamId::meterValue, -70.0f);
+  state.set(ParamId::inputIntegratedValue, -70.0f);
+  state.set(ParamId::outputIntegratedValue, -70.0f);
+  state.set(ParamId::outputShortTermValue, -70.0f);
+  state.set(ParamId::gainReductionValue, 0.0f);
   return state;
 }
 

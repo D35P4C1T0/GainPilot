@@ -175,23 +175,34 @@ void GainPilotPlugin<ChannelCount>::applyInputParameterChanges(Steinberg::Vst::I
 }
 
 template <std::size_t ChannelCount>
+void GainPilotPlugin<ChannelCount>::pushOutputParameter(Steinberg::Vst::IParameterChanges* changes,
+                                                        ParamId id,
+                                                        Steinberg::Vst::ParamValue plainValue,
+                                                        std::size_t cacheIndex) {
+  const auto normalized = plainToNormalized(id, static_cast<float>(plainValue));
+  if (std::abs(normalized - lastRuntimeOutputNormalized_[cacheIndex]) < 1.0e-6) {
+    return;
+  }
+
+  lastRuntimeOutputNormalized_[cacheIndex] = normalized;
+  Steinberg::int32 queueIndex = 0;
+  if (auto* queue = changes->addParameterData(toVstParamId(id), queueIndex)) {
+    Steinberg::int32 pointIndex = 0;
+    queue->addPoint(0, normalized, pointIndex);
+  }
+}
+
+template <std::size_t ChannelCount>
 void GainPilotPlugin<ChannelCount>::pushMeterOutput(Steinberg::Vst::IParameterChanges* changes) {
   if (changes == nullptr) {
     return;
   }
 
-  const auto currentMeterPlain = processor_.currentMeterValue();
-  const auto normalized = plainToNormalized(ParamId::meterValue, currentMeterPlain);
-  if (std::abs(normalized - lastMeterNormalized_) < 1.0e-6) {
-    return;
-  }
-
-  lastMeterNormalized_ = normalized;
-  Steinberg::int32 queueIndex = 0;
-  if (auto* queue = changes->addParameterData(toVstParamId(ParamId::meterValue), queueIndex)) {
-    Steinberg::int32 pointIndex = 0;
-    queue->addPoint(0, normalized, pointIndex);
-  }
+  pushOutputParameter(changes, ParamId::meterValue, processor_.currentMeterValue(), 0);
+  pushOutputParameter(changes, ParamId::inputIntegratedValue, processor_.currentInputIntegratedLufs(), 1);
+  pushOutputParameter(changes, ParamId::outputIntegratedValue, processor_.currentOutputIntegratedLufs(), 2);
+  pushOutputParameter(changes, ParamId::outputShortTermValue, processor_.currentOutputShortTermLufs(), 3);
+  pushOutputParameter(changes, ParamId::gainReductionValue, processor_.currentGainReductionDb(), 4);
 }
 
 template <std::size_t ChannelCount>
@@ -315,6 +326,10 @@ Steinberg::tresult PLUGIN_API GainPilotPlugin<ChannelCount>::setState(Steinberg:
   parameterState_ = *restored;
   parameterState_.set(ParamId::meterReset, 0.0f);
   parameterState_.set(ParamId::meterValue, -70.0f);
+  parameterState_.set(ParamId::inputIntegratedValue, -70.0f);
+  parameterState_.set(ParamId::outputIntegratedValue, -70.0f);
+  parameterState_.set(ParamId::outputShortTermValue, -70.0f);
+  parameterState_.set(ParamId::gainReductionValue, 0.0f);
   processor_.setParameters(parameterState_);
   lastProjectTimeSamples_.reset();
   return Steinberg::kResultOk;

@@ -32,6 +32,7 @@ public:
   [[nodiscard]] float currentInputIntegratedLufs() const;
   [[nodiscard]] float currentOutputIntegratedLufs() const;
   [[nodiscard]] float currentOutputShortTermLufs() const;
+  [[nodiscard]] float currentGainReductionDb() const;
 
 private:
   [[nodiscard]] float computeDesiredTotalGainDb(float detectorLufs) const;
@@ -39,6 +40,7 @@ private:
   [[nodiscard]] float fixedGainDb() const;
   [[nodiscard]] float effectiveInputLevelLufs() const;
   [[nodiscard]] float freezeThresholdLufs() const;
+  [[nodiscard]] bool speechModeEnabled() const;
   void updateMeterResetLatch();
   void updateAutoHoldGate(float detectorLufs);
 
@@ -52,6 +54,7 @@ private:
   float mediumGainDb_{0.0f};
   float slowGainDb_{0.0f};
   float integratedTrimGainDb_{0.0f};
+  float currentGainReductionDb_{0.0f};
   float fastTargetGainDb_{0.0f};
   float mediumTargetGainDb_{0.0f};
   float slowTargetGainDb_{0.0f};
@@ -62,6 +65,10 @@ private:
   float mediumReleaseCoeff_{0.0f};
   float slowAttackCoeff_{0.0f};
   float slowReleaseCoeff_{0.0f};
+  float speechMediumAttackCoeff_{0.0f};
+  float speechMediumReleaseCoeff_{0.0f};
+  float speechSlowAttackCoeff_{0.0f};
+  float speechSlowReleaseCoeff_{0.0f};
   float integratedTrimAttackCoeff_{0.0f};
   float integratedTrimReleaseCoeff_{0.0f};
   float learnedInputLevelLufs_{-23.0f};

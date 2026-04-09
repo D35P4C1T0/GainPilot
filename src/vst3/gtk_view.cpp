@@ -17,15 +17,17 @@ namespace gainpilot::vst3 {
 namespace {
 
 const Steinberg::ViewRect kDefaultViewRect{0, 0, 860, 520};
-constexpr std::array<ParamId, 8> kUiParameters{
+constexpr std::array<ParamId, 10> kUiParameters{
     ParamId::targetLevel,
     ParamId::truePeak,
     ParamId::maxGain,
-    ParamId::inputLevel,
-    ParamId::correctionHigh,
-    ParamId::correctionLow,
-    ParamId::corrMixMode,
-    ParamId::meterMode,
+    ParamId::inputTrim,
+    ParamId::programMode,
+    ParamId::meterValue,
+    ParamId::inputIntegratedValue,
+    ParamId::outputIntegratedValue,
+    ParamId::outputShortTermValue,
+    ParamId::gainReductionValue,
 };
 
 class GtkHostTimerHandler final : public Steinberg::FObject, public Steinberg::Linux::ITimerHandler {
@@ -162,10 +164,6 @@ void GainPilotGtkView::refreshFromModel() {
     if (callbacks_.getParameterValue) {
       editor_->setParameterValue(id, callbacks_.getParameterValue(id));
     }
-  }
-
-  if (callbacks_.getMeterValue) {
-    editor_->setParameterValue(ParamId::meterValue, callbacks_.getMeterValue());
   }
 
   if (callbacks_.getLatencyMilliseconds) {

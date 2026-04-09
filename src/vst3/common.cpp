@@ -137,6 +137,11 @@ const std::array<const char*, 3> kMeterModeLabels{
     "Integrated",
 };
 
+const std::array<const char*, 2> kProgramModeLabels{
+    "Auto",
+    "Speech",
+};
+
 Steinberg::Vst::Parameter* makeParameter(ParamId id) {
   using Steinberg::Vst::Parameter;
   using Steinberg::Vst::ParameterInfo;
@@ -149,6 +154,10 @@ Steinberg::Vst::Parameter* makeParameter(ParamId id) {
       return new DbParameter(STR16("True Peak"), toVstParamId(id), -10.0, 0.0, -1.0);
     case ParamId::maxGain:
       return new DbParameter(STR16("Max Gain"), toVstParamId(id), -10.0, 30.0, 17.0);
+    case ParamId::inputTrim:
+      return new DbParameter(STR16("Input Trim"), toVstParamId(id), -12.0, 12.0, 0.0);
+    case ParamId::programMode:
+      return makeEnumParameter(STR16("Program Mode"), toVstParamId(id), kProgramModeLabels, 0);
     case ParamId::freezeLevel: {
       return hideParameter(new LufsParameter(STR16("Freeze Level"), toVstParamId(id), -70.0, -10.0, -50.0));
     }
@@ -164,7 +173,7 @@ Steinberg::Vst::Parameter* makeParameter(ParamId id) {
       return hideParameter(makeEnumParameter(STR16("Meter Mode"), toVstParamId(id), kMeterModeLabels, 2));
     case ParamId::meterReset: {
       auto* parameter = new RangeParameter(
-          STR16("Reset Integrated"),
+          STR16("Reset / Relearn"),
           toVstParamId(id),
           nullptr,
           0.0,
@@ -186,7 +195,59 @@ Steinberg::Vst::Parameter* makeParameter(ParamId id) {
           0,
           ParameterInfo::kIsReadOnly);
       parameter->setPrecision(2);
-      return hideParameter(parameter);
+      return parameter;
+    }
+    case ParamId::inputIntegratedValue: {
+      auto* parameter = new RangeParameter(
+          STR16("Input LUFS-I"),
+          toVstParamId(id),
+          STR16("LUFS"),
+          -70.0,
+          10.0,
+          -70.0,
+          0,
+          ParameterInfo::kIsReadOnly);
+      parameter->setPrecision(2);
+      return parameter;
+    }
+    case ParamId::outputIntegratedValue: {
+      auto* parameter = new RangeParameter(
+          STR16("Output LUFS-I"),
+          toVstParamId(id),
+          STR16("LUFS"),
+          -70.0,
+          10.0,
+          -70.0,
+          0,
+          ParameterInfo::kIsReadOnly);
+      parameter->setPrecision(2);
+      return parameter;
+    }
+    case ParamId::outputShortTermValue: {
+      auto* parameter = new RangeParameter(
+          STR16("Output Short-Term"),
+          toVstParamId(id),
+          STR16("LUFS"),
+          -70.0,
+          10.0,
+          -70.0,
+          0,
+          ParameterInfo::kIsReadOnly);
+      parameter->setPrecision(2);
+      return parameter;
+    }
+    case ParamId::gainReductionValue: {
+      auto* parameter = new RangeParameter(
+          STR16("Gain Reduction"),
+          toVstParamId(id),
+          STR16("dB"),
+          0.0,
+          24.0,
+          0.0,
+          0,
+          ParameterInfo::kIsReadOnly);
+      parameter->setPrecision(2);
+      return parameter;
     }
     case ParamId::count:
       break;

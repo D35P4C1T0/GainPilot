@@ -120,18 +120,33 @@ int main() {
 
   gainpilot::ParameterState state;
   state.set(gainpilot::ParamId::targetLevel, -14.0f);
+  state.set(gainpilot::ParamId::inputTrim, 3.0f);
+  state.set(gainpilot::ParamId::programMode, 1.0f);
   state.set(gainpilot::ParamId::meterMode, 2.0f);
   state.set(gainpilot::ParamId::meterReset, 1.0f);
   state.set(gainpilot::ParamId::meterValue, -12.0f);
+  state.set(gainpilot::ParamId::inputIntegratedValue, -18.0f);
+  state.set(gainpilot::ParamId::outputIntegratedValue, -16.0f);
+  state.set(gainpilot::ParamId::outputShortTermValue, -15.0f);
+  state.set(gainpilot::ParamId::gainReductionValue, 4.0f);
   const auto serialized = gainpilot::serializeState(state);
   const auto restored = gainpilot::deserializeState(serialized);
   if (!restored || restored->get(gainpilot::ParamId::targetLevel) != -14.0f) {
     std::cerr << "State serialization roundtrip failed\n";
     return 1;
   }
+  if (restored->get(gainpilot::ParamId::inputTrim) != 3.0f ||
+      restored->get(gainpilot::ParamId::programMode) != 1.0f) {
+    std::cerr << "New control state did not survive serialization\n";
+    return 1;
+  }
   if (restored->get(gainpilot::ParamId::meterMode) != 2.0f ||
       restored->get(gainpilot::ParamId::meterReset) != 0.0f ||
-      restored->get(gainpilot::ParamId::meterValue) != -70.0f) {
+      restored->get(gainpilot::ParamId::meterValue) != -70.0f ||
+      restored->get(gainpilot::ParamId::inputIntegratedValue) != -70.0f ||
+      restored->get(gainpilot::ParamId::outputIntegratedValue) != -70.0f ||
+      restored->get(gainpilot::ParamId::outputShortTermValue) != -70.0f ||
+      restored->get(gainpilot::ParamId::gainReductionValue) != 0.0f) {
     std::cerr << "Transient meter state leaked into serialized state\n";
     return 1;
   }
@@ -205,6 +220,11 @@ int main() {
   auto lowerTargetState = defaultState;
   lowerTargetState.set(gainpilot::ParamId::targetLevel, -24.0f);
   const float lowerTargetIntegrated = processAndMeasureIntegrated(lowerTargetState, longDynLeft, longDynRight);
+  auto trimOnlyState = defaultState;
+  trimOnlyState.set(gainpilot::ParamId::correctionHigh, 0.0f);
+  trimOnlyState.set(gainpilot::ParamId::correctionLow, 0.0f);
+  trimOnlyState.set(gainpilot::ParamId::inputTrim, 6.0f);
+  const float trimOnlyIntegrated = processAndMeasureIntegrated(trimOnlyState, longDynLeft, longDynRight);
 
   const float targetLevel = dynamicState.get(gainpilot::ParamId::targetLevel);
   if (std::abs(looseIntegrated - targetLevel) > 2.5f) {
@@ -227,6 +247,10 @@ int main() {
     std::cerr << "Target Level does not materially change processed loudness\n";
     return 1;
   }
+  if (trimOnlyIntegrated - defaultIntegrated < 4.5f) {
+    std::cerr << "Input Trim does not materially affect the signal path\n";
+    return 1;
+  }
 
   gainpilot::ParameterState zeroInputState = dynamicState;
   zeroInputState.set(gainpilot::ParamId::inputLevel, 0.0f);
@@ -237,6 +261,14 @@ int main() {
   const float zeroInputIntegrated = processAndMeasureIntegrated(zeroInputState, dynLeft, dynRight);
   if (!std::isfinite(zeroInputIntegrated)) {
     std::cerr << "Input Level at 0 dB causes non-finite processing\n";
+    return 1;
+  }
+
+  processor.reset();
+  processor.setParameters(state);
+  processor.process(buffer);
+  if (!std::isfinite(processor.currentGainReductionDb()) || processor.currentGainReductionDb() < 0.0f) {
+    std::cerr << "Gain reduction readout is invalid\n";
     return 1;
   }
 

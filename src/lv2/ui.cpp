@@ -18,15 +18,21 @@ constexpr std::uint32_t kControlBase = GAINPILOT_LV2_CHANNELS * 2;
 constexpr std::uint32_t kTargetLevel = kControlBase + 0;
 constexpr std::uint32_t kTruePeak = kControlBase + 1;
 constexpr std::uint32_t kMaxGain = kControlBase + 2;
-constexpr std::uint32_t kFreezeLevel = kControlBase + 3;
-constexpr std::uint32_t kInputLevel = kControlBase + 4;
-constexpr std::uint32_t kCorrectionHigh = kControlBase + 5;
-constexpr std::uint32_t kCorrectionLow = kControlBase + 6;
-constexpr std::uint32_t kCorrMixMode = kControlBase + 7;
-constexpr std::uint32_t kMeterMode = kControlBase + 8;
-constexpr std::uint32_t kMeterReset = kControlBase + 9;
-constexpr std::uint32_t kMeterValue = kControlBase + 10;
-constexpr std::uint32_t kLatency = kControlBase + 11;
+constexpr std::uint32_t kInputTrim = kControlBase + 3;
+constexpr std::uint32_t kProgramMode = kControlBase + 4;
+constexpr std::uint32_t kFreezeLevel = kControlBase + 5;
+constexpr std::uint32_t kInputLevel = kControlBase + 6;
+constexpr std::uint32_t kCorrectionHigh = kControlBase + 7;
+constexpr std::uint32_t kCorrectionLow = kControlBase + 8;
+constexpr std::uint32_t kCorrMixMode = kControlBase + 9;
+constexpr std::uint32_t kMeterMode = kControlBase + 10;
+constexpr std::uint32_t kMeterReset = kControlBase + 11;
+constexpr std::uint32_t kMeterValue = kControlBase + 12;
+constexpr std::uint32_t kInputIntegratedValue = kControlBase + 13;
+constexpr std::uint32_t kOutputIntegratedValue = kControlBase + 14;
+constexpr std::uint32_t kOutputShortTermValue = kControlBase + 15;
+constexpr std::uint32_t kGainReductionValue = kControlBase + 16;
+constexpr std::uint32_t kLatency = kControlBase + 17;
 
 std::uint32_t portForParam(ParamId id) {
   switch (id) {
@@ -36,6 +42,10 @@ std::uint32_t portForParam(ParamId id) {
       return kTruePeak;
     case ParamId::maxGain:
       return kMaxGain;
+    case ParamId::inputTrim:
+      return kInputTrim;
+    case ParamId::programMode:
+      return kProgramMode;
     case ParamId::freezeLevel:
       return kFreezeLevel;
     case ParamId::inputLevel:
@@ -68,6 +78,12 @@ bool paramForPort(std::uint32_t port, ParamId& id) {
     case kMaxGain:
       id = ParamId::maxGain;
       return true;
+    case kInputTrim:
+      id = ParamId::inputTrim;
+      return true;
+    case kProgramMode:
+      id = ParamId::programMode;
+      return true;
     case kFreezeLevel:
       id = ParamId::freezeLevel;
       return true;
@@ -91,6 +107,18 @@ bool paramForPort(std::uint32_t port, ParamId& id) {
       return true;
     case kMeterValue:
       id = ParamId::meterValue;
+      return true;
+    case kInputIntegratedValue:
+      id = ParamId::inputIntegratedValue;
+      return true;
+    case kOutputIntegratedValue:
+      id = ParamId::outputIntegratedValue;
+      return true;
+    case kOutputShortTermValue:
+      id = ParamId::outputShortTermValue;
+      return true;
+    case kGainReductionValue:
+      id = ParamId::gainReductionValue;
       return true;
     default:
       return false;

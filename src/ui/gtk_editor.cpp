@@ -132,12 +132,38 @@ void GainPilotGtkEditor::setParameterValue(ParamId id, float value) {
   values_[paramIndex(id)] = value;
 
   if (id == ParamId::meterValue) {
-    updateMeter(value);
+    updateReadout(meterValueLabel_, id, value);
     return;
   }
 
-  if (id == ParamId::targetLevel || id == ParamId::truePeak || id == ParamId::maxGain) {
+  if (id == ParamId::targetLevel || id == ParamId::truePeak || id == ParamId::maxGain || id == ParamId::inputTrim) {
     updateSlider(id, value);
+    return;
+  }
+
+  if (id == ParamId::programMode) {
+    updateChoice(id, static_cast<int>(std::lround(value)));
+    return;
+  }
+
+  if (id == ParamId::inputIntegratedValue) {
+    updateReadout(inputIntegratedLabel_, id, value);
+    return;
+  }
+
+  if (id == ParamId::outputIntegratedValue) {
+    updateReadout(outputIntegratedLabel_, id, value);
+    return;
+  }
+
+  if (id == ParamId::outputShortTermValue) {
+    updateReadout(outputShortTermLabel_, id, value);
+    return;
+  }
+
+  if (id == ParamId::gainReductionValue) {
+    updateMeter(value);
+    updateReadout(gainReductionLabel_, id, value);
   }
 }
 
@@ -187,17 +213,26 @@ void GainPilotGtkEditor::build(const char* badgeText) {
 void GainPilotGtkEditor::buildMeterPanel(GtkWidget* panel) {
   auto* box = createPanelBox(panel, GTK_ORIENTATION_VERTICAL, 14);
 
-  gtk_box_pack_start(GTK_BOX(box), createLabel("INPUT LUFS", "gainpilot-title", 0.5f), FALSE, FALSE, 0);
-  gtk_box_pack_start(GTK_BOX(box), createLabel("BS.1770 / EBU", "gainpilot-subtitle", 0.5f), FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(box), createLabel("GAIN REDUCTION", "gainpilot-title", 0.5f), FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(box), createLabel("Live readout", "gainpilot-subtitle", 0.5f), FALSE, FALSE, 0);
 
-  meterBar_ = gtk_level_bar_new_for_interval(-70.0, 10.0);
+  meterBar_ = gtk_level_bar_new_for_interval(0.0, 24.0);
   gtk_orientable_set_orientation(GTK_ORIENTABLE(meterBar_), GTK_ORIENTATION_VERTICAL);
   gtk_widget_set_size_request(meterBar_, 54, 250);
-  gtk_level_bar_set_value(GTK_LEVEL_BAR(meterBar_), -70.0);
+  gtk_level_bar_set_value(GTK_LEVEL_BAR(meterBar_), 0.0);
   gtk_box_pack_start(GTK_BOX(box), meterBar_, TRUE, TRUE, 0);
 
-  meterValueLabel_ = createLabel("-70.00 LUFS", "gainpilot-readout", 0.5f);
+  gainReductionLabel_ = createLabel("0.00 dB", "gainpilot-readout", 0.5f);
+  gtk_box_pack_start(GTK_BOX(box), gainReductionLabel_, FALSE, FALSE, 0);
+
+  meterValueLabel_ = createLabel("In: -70.00 LUFS-I", "gainpilot-readout", 0.5f);
   gtk_box_pack_start(GTK_BOX(box), meterValueLabel_, FALSE, FALSE, 0);
+  inputIntegratedLabel_ = createLabel("Input: -70.00 LUFS-I", "gainpilot-subtitle", 0.5f);
+  gtk_box_pack_start(GTK_BOX(box), inputIntegratedLabel_, FALSE, FALSE, 0);
+  outputIntegratedLabel_ = createLabel("Output: -70.00 LUFS-I", "gainpilot-subtitle", 0.5f);
+  gtk_box_pack_start(GTK_BOX(box), outputIntegratedLabel_, FALSE, FALSE, 0);
+  outputShortTermLabel_ = createLabel("Short-Term: -70.00 LUFS", "gainpilot-subtitle", 0.5f);
+  gtk_box_pack_start(GTK_BOX(box), outputShortTermLabel_, FALSE, FALSE, 0);
 
   latencyLabel_ = createLabel("Latency: --", "gainpilot-subtitle", 0.5f);
   gtk_box_pack_end(GTK_BOX(box), latencyLabel_, FALSE, FALSE, 0);
@@ -212,7 +247,7 @@ void GainPilotGtkEditor::buildHeader(GtkWidget* parent, const char* badgeText) {
   auto* heading = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
   gtk_box_pack_start(GTK_BOX(heading), createLabel("GainPilot", "gainpilot-title"), FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(heading),
-                     createLabel("LUFS auto leveler with true peak protection", "gainpilot-subtitle"),
+                     createLabel("Auto leveling with trim, speech mode, and relearn", "gainpilot-subtitle"),
                      FALSE,
                      FALSE,
                      0);
@@ -231,6 +266,8 @@ void GainPilotGtkEditor::buildTargetPanel(GtkWidget* parent) {
   gtk_box_pack_start(GTK_BOX(box), createLabel("Level Targeting", "gainpilot-section"), FALSE, FALSE, 0);
 
   addSlider(box, ParamId::targetLevel);
+  addSlider(box, ParamId::inputTrim);
+  addProgramModeChoice(box);
 }
 
 void GainPilotGtkEditor::buildDynamicsPanel(GtkWidget* parent) {
@@ -243,6 +280,10 @@ void GainPilotGtkEditor::buildDynamicsPanel(GtkWidget* parent) {
 
   addSlider(box, ParamId::truePeak);
   addSlider(box, ParamId::maxGain);
+
+  auto* reset = gtk_button_new_with_label("Reset / Relearn");
+  g_signal_connect(reset, "clicked", G_CALLBACK(onResetClicked), this);
+  gtk_box_pack_start(GTK_BOX(box), reset, FALSE, FALSE, 0);
 }
 
 void GainPilotGtkEditor::addSlider(GtkWidget* parent, ParamId param) {
@@ -275,6 +316,19 @@ void GainPilotGtkEditor::addSlider(GtkWidget* parent, ParamId param) {
   binding.range = GTK_RANGE(scale);
 }
 
+void GainPilotGtkEditor::addProgramModeChoice(GtkWidget* parent) {
+  gtk_box_pack_start(GTK_BOX(parent), createLabel("Program Mode", "gainpilot-subtitle"), FALSE, FALSE, 0);
+  auto* combo = gtk_combo_box_text_new();
+  for (const auto* label : kProgramModeLabels) {
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), label);
+  }
+  gtk_combo_box_set_active(GTK_COMBO_BOX(combo), static_cast<int>(ProgramMode::automatic));
+  g_object_set_data(G_OBJECT(combo), "gainpilot-param", GUINT_TO_POINTER(static_cast<unsigned>(ParamId::programMode)));
+  g_signal_connect(combo, "changed", G_CALLBACK(onComboChanged), this);
+  gtk_box_pack_start(GTK_BOX(parent), combo, FALSE, FALSE, 0);
+  programModeCombo_ = GTK_COMBO_BOX(combo);
+}
+
 void GainPilotGtkEditor::updateSlider(ParamId id, float value) {
   auto& binding = sliders_[sliderIndex(id)];
   if (binding.range == nullptr || binding.valueLabel == nullptr) {
@@ -289,19 +343,23 @@ void GainPilotGtkEditor::updateSlider(ParamId id, float value) {
 }
 
 void GainPilotGtkEditor::updateChoice(ParamId id, int value) {
-  (void)id;
-  (void)value;
   suppressEvents_ = true;
+  if (id == ParamId::programMode && programModeCombo_ != nullptr) {
+    gtk_combo_box_set_active(programModeCombo_, std::clamp(value, 0, static_cast<int>(kProgramModeLabels.size() - 1)));
+  }
   suppressEvents_ = false;
 }
 
 void GainPilotGtkEditor::updateMeter(float value) {
   if (meterBar_ != nullptr) {
-    gtk_level_bar_set_value(GTK_LEVEL_BAR(meterBar_), value);
+    gtk_level_bar_set_value(GTK_LEVEL_BAR(meterBar_), std::clamp(value, 0.0f, 24.0f));
   }
-  if (meterValueLabel_ != nullptr) {
+}
+
+void GainPilotGtkEditor::updateReadout(GtkWidget* label, ParamId id, float value) {
+  if (label != nullptr) {
     char buffer[64];
-    gtk_label_set_text(GTK_LABEL(meterValueLabel_), formatValue(ParamId::meterValue, value, buffer, sizeof(buffer)));
+    gtk_label_set_text(GTK_LABEL(label), formatValue(id, value, buffer, sizeof(buffer)));
   }
 }
 
@@ -353,6 +411,8 @@ std::size_t GainPilotGtkEditor::sliderIndex(ParamId id) {
       return 1;
     case ParamId::maxGain:
       return 2;
+    case ParamId::inputTrim:
+      return 3;
     default:
       return 0;
   }
@@ -363,17 +423,32 @@ const char* GainPilotGtkEditor::formatValue(ParamId id, float value, char* buffe
     case ParamId::targetLevel:
     case ParamId::inputLevel:
     case ParamId::freezeLevel:
-    case ParamId::meterValue:
       std::snprintf(buffer, size, "%.2f LUFS", value);
+      return buffer;
+    case ParamId::meterValue:
+      std::snprintf(buffer, size, "In: %.2f LUFS-I", value);
+      return buffer;
+    case ParamId::inputIntegratedValue:
+      std::snprintf(buffer, size, "Input: %.2f LUFS-I", value);
+      return buffer;
+    case ParamId::outputIntegratedValue:
+      std::snprintf(buffer, size, "Output: %.2f LUFS-I", value);
+      return buffer;
+    case ParamId::outputShortTermValue:
+      std::snprintf(buffer, size, "Short-Term: %.2f LUFS", value);
       return buffer;
     case ParamId::truePeak:
     case ParamId::maxGain:
+    case ParamId::inputTrim:
+    case ParamId::gainReductionValue:
       std::snprintf(buffer, size, "%.2f dB", value);
       return buffer;
     case ParamId::correctionHigh:
     case ParamId::correctionLow:
       std::snprintf(buffer, size, "%.1f %%", value);
       return buffer;
+    case ParamId::programMode:
+      return kProgramModeLabels[std::clamp(static_cast<int>(std::lround(value)), 0, static_cast<int>(kProgramModeLabels.size() - 1))];
     case ParamId::corrMixMode:
       return kCorrMixModeLabels[std::clamp(static_cast<int>(std::lround(value)), 0, static_cast<int>(kCorrMixModeLabels.size() - 1))];
     case ParamId::meterMode:

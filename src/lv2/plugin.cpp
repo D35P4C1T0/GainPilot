@@ -31,15 +31,21 @@ enum PortIndex : std::uint32_t {
   kTargetLevel = 4,
   kTruePeak = 5,
   kMaxGain = 6,
-  kFreezeLevel = 7,
-  kInputLevel = 8,
-  kCorrectionHigh = 9,
-  kCorrectionLow = 10,
-  kCorrMixMode = 11,
-  kMeterMode = 12,
-  kMeterReset = 13,
-  kMeterValue = 14,
-  kLatency = 15
+  kInputTrim = 7,
+  kProgramMode = 8,
+  kFreezeLevel = 9,
+  kInputLevel = 10,
+  kCorrectionHigh = 11,
+  kCorrectionLow = 12,
+  kCorrMixMode = 13,
+  kMeterMode = 14,
+  kMeterReset = 15,
+  kMeterValue = 16,
+  kInputIntegratedValue = 17,
+  kOutputIntegratedValue = 18,
+  kOutputShortTermValue = 19,
+  kGainReductionValue = 20,
+  kLatency = 21
 };
 
 constexpr std::uint32_t kNumAudioPorts = GAINPILOT_LV2_CHANNELS * 2;
@@ -126,6 +132,10 @@ public:
     parameters_ = *restored;
     parameters_.set(ParamId::meterReset, 0.0f);
     parameters_.set(ParamId::meterValue, -70.0f);
+    parameters_.set(ParamId::inputIntegratedValue, -70.0f);
+    parameters_.set(ParamId::outputIntegratedValue, -70.0f);
+    parameters_.set(ParamId::outputShortTermValue, -70.0f);
+    parameters_.set(ParamId::gainReductionValue, 0.0f);
     processor_.setParameters(parameters_);
     return LV2_STATE_SUCCESS;
   }
@@ -152,18 +162,36 @@ public:
     if (controlPorts_[kControlMeterValue] != nullptr) {
       *controlPorts_[kControlMeterValue] = processor_.currentMeterValue();
     }
+    if (controlPorts_[kControlInputIntegratedValue] != nullptr) {
+      *controlPorts_[kControlInputIntegratedValue] = processor_.currentInputIntegratedLufs();
+    }
+    if (controlPorts_[kControlOutputIntegratedValue] != nullptr) {
+      *controlPorts_[kControlOutputIntegratedValue] = processor_.currentOutputIntegratedLufs();
+    }
+    if (controlPorts_[kControlOutputShortTermValue] != nullptr) {
+      *controlPorts_[kControlOutputShortTermValue] = processor_.currentOutputShortTermLufs();
+    }
+    if (controlPorts_[kControlGainReductionValue] != nullptr) {
+      *controlPorts_[kControlGainReductionValue] = processor_.currentGainReductionDb();
+    }
     if (controlPorts_[kControlLatency] != nullptr) {
       *controlPorts_[kControlLatency] = processor_.currentLatencySamples();
     }
   }
 
 private:
-  static constexpr std::size_t kControlMeterValue = 10;
-  static constexpr std::size_t kControlLatency = 11;
+  static constexpr std::size_t kControlMeterValue = 12;
+  static constexpr std::size_t kControlInputIntegratedValue = 13;
+  static constexpr std::size_t kControlOutputIntegratedValue = 14;
+  static constexpr std::size_t kControlOutputShortTermValue = 15;
+  static constexpr std::size_t kControlGainReductionValue = 16;
+  static constexpr std::size_t kControlLatency = 17;
   static constexpr std::array inputControlMap{
       ParamId::targetLevel,
       ParamId::truePeak,
       ParamId::maxGain,
+      ParamId::inputTrim,
+      ParamId::programMode,
       ParamId::freezeLevel,
       ParamId::inputLevel,
       ParamId::correctionHigh,
@@ -186,6 +214,10 @@ private:
     }
     snapshot.set(ParamId::meterReset, 0.0f);
     snapshot.set(ParamId::meterValue, -70.0f);
+    snapshot.set(ParamId::inputIntegratedValue, -70.0f);
+    snapshot.set(ParamId::outputIntegratedValue, -70.0f);
+    snapshot.set(ParamId::outputShortTermValue, -70.0f);
+    snapshot.set(ParamId::gainReductionValue, 0.0f);
     return snapshot;
   }
 
@@ -217,7 +249,7 @@ private:
   std::vector<float*> audioOutputs_{};
   mutable LV2_URID_Map* map_{nullptr};
   mutable Uris uris_{};
-  std::array<float*, 12> controlPorts_{};
+  std::array<float*, 18> controlPorts_{};
 };
 
 LV2_State_Status saveState(LV2_Handle instance,

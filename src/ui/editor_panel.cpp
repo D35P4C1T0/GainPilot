@@ -16,17 +16,9 @@ namespace gainpilot::ui {
 
 namespace {
 
-constexpr std::array<const char*, 4> kCorrMixLabels{
-    "Linear / Linear",
-    "Linear / Log",
-    "Log / Linear",
-    "Log / Log",
-};
-
-constexpr std::array<const char*, 3> kMeterModeLabels{
-    "Momentary",
-    "Short-Term",
-    "Integrated",
+constexpr std::array<const char*, 2> kProgramModeLabels{
+    "Auto",
+    "Speech",
 };
 
 const wxColour kCanvas(0xF2, 0xED, 0xDC);
@@ -65,12 +57,38 @@ void GainPilotEditorPanel::setParameterValue(ParamId id, float value) {
   values_[paramIndex(id)] = value;
 
   if (id == ParamId::meterValue) {
-    updateMeter(value);
+    updateReadout(meterValueLabel_, ParamId::meterValue, value);
     return;
   }
 
-  if (id == ParamId::targetLevel || id == ParamId::truePeak || id == ParamId::maxGain) {
+  if (id == ParamId::targetLevel || id == ParamId::truePeak || id == ParamId::maxGain || id == ParamId::inputTrim) {
     updateSliderRow(id, value);
+    return;
+  }
+
+  if (id == ParamId::programMode) {
+    updateChoice(id, static_cast<int>(std::lround(value)));
+    return;
+  }
+
+  if (id == ParamId::inputIntegratedValue) {
+    updateReadout(inputIntegratedLabel_, id, value);
+    return;
+  }
+
+  if (id == ParamId::outputIntegratedValue) {
+    updateReadout(outputIntegratedLabel_, id, value);
+    return;
+  }
+
+  if (id == ParamId::outputShortTermValue) {
+    updateReadout(outputShortTermLabel_, id, value);
+    return;
+  }
+
+  if (id == ParamId::gainReductionValue) {
+    updateMeter(value);
+    updateReadout(gainReductionLabel_, id, value);
   }
 }
 
@@ -92,14 +110,23 @@ void GainPilotEditorPanel::buildUi() {
   auto* meterSizer = new wxBoxSizer(wxVERTICAL);
   meterPanel->SetSizer(meterSizer);
 
-  meterSizer->Add(makeLabel(meterPanel, "INPUT LUFS", true), 0, wxALIGN_CENTER_HORIZONTAL | wxTOP, 8);
-  meterSizer->Add(makeLabel(meterPanel, "BS.1770 / EBU", false, kSubtle), 0, wxALIGN_CENTER_HORIZONTAL | wxBOTTOM, 10);
+  meterSizer->Add(makeLabel(meterPanel, "GAIN REDUCTION", true), 0, wxALIGN_CENTER_HORIZONTAL | wxTOP, 8);
+  meterSizer->Add(makeLabel(meterPanel, "Live readout", false, kSubtle), 0, wxALIGN_CENTER_HORIZONTAL | wxBOTTOM, 10);
 
   meterGauge_ = new wxGauge(meterPanel, wxID_ANY, 1000, wxDefaultPosition, wxSize(54, 220), wxGA_VERTICAL);
   meterSizer->Add(meterGauge_, 0, wxALIGN_CENTER_HORIZONTAL | wxBOTTOM, 10);
 
-  meterValueLabel_ = makeLabel(meterPanel, "-70.00 LUFS", true, kAccent);
+  gainReductionLabel_ = makeLabel(meterPanel, "0.00 dB", true, kAccent);
+  meterSizer->Add(gainReductionLabel_, 0, wxALIGN_CENTER_HORIZONTAL | wxBOTTOM, 8);
+
+  meterValueLabel_ = makeLabel(meterPanel, "In: -70.00 LUFS-I", false, kText);
   meterSizer->Add(meterValueLabel_, 0, wxALIGN_CENTER_HORIZONTAL | wxBOTTOM, 12);
+  inputIntegratedLabel_ = makeLabel(meterPanel, "Input: -70.00 LUFS-I", false, kText);
+  meterSizer->Add(inputIntegratedLabel_, 0, wxALIGN_CENTER_HORIZONTAL | wxBOTTOM, 6);
+  outputIntegratedLabel_ = makeLabel(meterPanel, "Output: -70.00 LUFS-I", false, kText);
+  meterSizer->Add(outputIntegratedLabel_, 0, wxALIGN_CENTER_HORIZONTAL | wxBOTTOM, 6);
+  outputShortTermLabel_ = makeLabel(meterPanel, "Short-Term: -70.00 LUFS", false, kText);
+  meterSizer->Add(outputShortTermLabel_, 0, wxALIGN_CENTER_HORIZONTAL | wxBOTTOM, 6);
 
   auto* contentSizer = new wxBoxSizer(wxVERTICAL);
   auto* headerPanel = new wxPanel(this, wxID_ANY);
@@ -108,7 +135,7 @@ void GainPilotEditorPanel::buildUi() {
 
   auto* titleSizer = new wxBoxSizer(wxVERTICAL);
   titleSizer->Add(makeLabel(headerPanel, "GainPilot", true), 0, wxBOTTOM, 4);
-  titleSizer->Add(makeLabel(headerPanel, "LUFS auto leveler with true peak protection", false, kSubtle), 0);
+  titleSizer->Add(makeLabel(headerPanel, "Auto leveling with trim, speech mode, and relearn", false, kSubtle), 0);
   headerSizer->Add(titleSizer, 1, wxEXPAND);
   headerSizer->Add(makeLabel(headerPanel, "Mono / Stereo", true, kAccent), 0, wxALIGN_CENTER_VERTICAL);
 
@@ -118,6 +145,8 @@ void GainPilotEditorPanel::buildUi() {
   targetPanel->SetSizer(targetSizer);
   targetSizer->Add(makeLabel(targetPanel, "Level Targeting", true), 0, wxBOTTOM, 10);
   addSliderRow(targetPanel, ParamId::targetLevel, "LUFS", 2);
+  addSliderRow(targetPanel, ParamId::inputTrim, "dB", 2);
+  addProgramModeChoice(targetPanel);
   targetSizer->AddStretchSpacer();
 
   auto* dynamicsPanel = new wxPanel(this, wxID_ANY);
@@ -126,6 +155,13 @@ void GainPilotEditorPanel::buildUi() {
   dynamicsSizer->Add(makeLabel(dynamicsPanel, "Dynamics & Ceiling", true), 0, wxBOTTOM, 10);
   addSliderRow(dynamicsPanel, ParamId::truePeak, "dB", 2);
   addSliderRow(dynamicsPanel, ParamId::maxGain, "dB", 2);
+  auto* relearn = new wxButton(dynamicsPanel, wxID_ANY, "Reset / Relearn");
+  dynamicsSizer->Add(relearn, 0, wxTOP | wxBOTTOM, 8);
+  relearn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+    if (callbacks_.resetIntegrated) {
+      callbacks_.resetIntegrated();
+    }
+  });
   dynamicsSizer->AddStretchSpacer();
   latencyLabel_ = makeLabel(dynamicsPanel, "Latency: 0.00 ms", false, kSubtle);
   dynamicsSizer->Add(latencyLabel_, 0, wxTOP, 10);
@@ -141,7 +177,16 @@ void GainPilotEditorPanel::buildUi() {
 
   SetSizer(root);
 
-  updateMeter(values_[paramIndex(ParamId::meterValue)]);
+  updateMeter(values_[paramIndex(ParamId::gainReductionValue)]);
+  updateReadout(meterValueLabel_, ParamId::meterValue, values_[paramIndex(ParamId::meterValue)]);
+  updateReadout(inputIntegratedLabel_, ParamId::inputIntegratedValue, values_[paramIndex(ParamId::inputIntegratedValue)]);
+  updateReadout(outputIntegratedLabel_,
+                ParamId::outputIntegratedValue,
+                values_[paramIndex(ParamId::outputIntegratedValue)]);
+  updateReadout(outputShortTermLabel_,
+                ParamId::outputShortTermValue,
+                values_[paramIndex(ParamId::outputShortTermValue)]);
+  updateReadout(gainReductionLabel_, ParamId::gainReductionValue, values_[paramIndex(ParamId::gainReductionValue)]);
   setLatencyMilliseconds(0.0f);
 }
 
@@ -197,6 +242,23 @@ void GainPilotEditorPanel::addSliderRow(wxWindow* parent, ParamId id, const char
   });
 }
 
+void GainPilotEditorPanel::addProgramModeChoice(wxWindow* parent) {
+  auto* parentSizer = parent->GetSizer();
+  parentSizer->Add(makeLabel(parent, "Program Mode", false, kSubtle), 0, wxBOTTOM, 4);
+  programModeChoice_ = new wxChoice(parent, wxID_ANY);
+  for (const auto* label : kProgramModeLabels) {
+    programModeChoice_->Append(label);
+  }
+  programModeChoice_->SetSelection(static_cast<int>(ProgramMode::automatic));
+  parentSizer->Add(programModeChoice_, 0, wxEXPAND | wxBOTTOM, 10);
+  programModeChoice_->Bind(wxEVT_CHOICE, [this](wxCommandEvent& event) {
+    values_[paramIndex(ParamId::programMode)] = static_cast<float>(event.GetSelection());
+    if (!suppressEvents_ && callbacks_.setParameterValue) {
+      callbacks_.setParameterValue(ParamId::programMode, static_cast<float>(event.GetSelection()));
+    }
+  });
+}
+
 void GainPilotEditorPanel::updateSliderRow(ParamId id, float value) {
   const auto& row = sliderRows_[paramIndex(id)];
   if (row.slider == nullptr || row.value == nullptr) {
@@ -211,21 +273,22 @@ void GainPilotEditorPanel::updateSliderRow(ParamId id, float value) {
 
 void GainPilotEditorPanel::updateChoice(ParamId id, int value) {
   suppressEvents_ = true;
-  if (id == ParamId::corrMixMode && corrMixModeChoice_ != nullptr) {
-    corrMixModeChoice_->SetSelection(std::clamp(value, 0, static_cast<int>(kCorrMixLabels.size() - 1)));
-  } else if (id == ParamId::meterMode && meterModeChoice_ != nullptr) {
-    meterModeChoice_->SetSelection(std::clamp(value, 0, static_cast<int>(kMeterModeLabels.size() - 1)));
+  if (id == ParamId::programMode && programModeChoice_ != nullptr) {
+    programModeChoice_->SetSelection(std::clamp(value, 0, static_cast<int>(kProgramModeLabels.size() - 1)));
   }
   suppressEvents_ = false;
 }
 
 void GainPilotEditorPanel::updateMeter(float value) {
   if (meterGauge_ != nullptr) {
-    const auto normalized = static_cast<int>(std::clamp((value + 70.0f) / 80.0f, 0.0f, 1.0f) * 1000.0f);
+    const auto normalized = static_cast<int>(std::clamp(value / 24.0f, 0.0f, 1.0f) * 1000.0f);
     meterGauge_->SetValue(normalized);
   }
-  if (meterValueLabel_ != nullptr) {
-    meterValueLabel_->SetLabel(formatValue(ParamId::meterValue, value));
+}
+
+void GainPilotEditorPanel::updateReadout(wxStaticText* label, ParamId id, float value) {
+  if (label != nullptr) {
+    label->SetLabel(formatValue(id, value));
   }
 }
 
@@ -246,20 +309,32 @@ wxString GainPilotEditorPanel::formatValue(ParamId id, float value) {
     case ParamId::targetLevel:
     case ParamId::inputLevel:
     case ParamId::freezeLevel:
-    case ParamId::meterValue:
       return wxString::Format("%.2f LUFS", value);
+    case ParamId::meterValue:
+      return wxString::Format("In: %.2f LUFS-I", value);
+    case ParamId::inputIntegratedValue:
+      return wxString::Format("Input: %.2f LUFS-I", value);
+    case ParamId::outputIntegratedValue:
+      return wxString::Format("Output: %.2f LUFS-I", value);
+    case ParamId::outputShortTermValue:
+      return wxString::Format("Short-Term: %.2f LUFS", value);
     case ParamId::truePeak:
     case ParamId::maxGain:
+    case ParamId::inputTrim:
+      return wxString::Format("%.2f dB", value);
+    case ParamId::gainReductionValue:
       return wxString::Format("%.2f dB", value);
     case ParamId::correctionHigh:
     case ParamId::correctionLow:
       return wxString::Format("%.1f %%", value);
+    case ParamId::programMode:
+      return kProgramModeLabels[std::clamp(static_cast<int>(std::lround(value)), 0, static_cast<int>(kProgramModeLabels.size() - 1))];
     case ParamId::corrMixMode:
-      return kCorrMixLabels[std::clamp(static_cast<int>(std::lround(value)), 0, static_cast<int>(kCorrMixLabels.size() - 1))];
+      return "Legacy";
     case ParamId::meterMode:
-      return kMeterModeLabels[std::clamp(static_cast<int>(std::lround(value)), 0, static_cast<int>(kMeterModeLabels.size() - 1))];
+      return "Integrated";
     case ParamId::meterReset:
-      return value > 0.5f ? "Reset" : "Idle";
+      return value > 0.5f ? "Relearning" : "Ready";
     case ParamId::count:
       break;
   }

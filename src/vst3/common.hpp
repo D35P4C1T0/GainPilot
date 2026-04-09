@@ -22,7 +22,14 @@ inline constexpr std::array kExportedVstParamIds{
     ParamId::targetLevel,
     ParamId::truePeak,
     ParamId::maxGain,
+    ParamId::inputTrim,
+    ParamId::programMode,
+    ParamId::meterReset,
     ParamId::meterValue,
+    ParamId::inputIntegratedValue,
+    ParamId::outputIntegratedValue,
+    ParamId::outputShortTermValue,
+    ParamId::gainReductionValue,
 };
 
 Steinberg::Vst::Parameter* makeParameter(ParamId id);
@@ -32,11 +39,12 @@ Steinberg::Vst::Parameter* makeParameter(ParamId id);
 }
 
 [[nodiscard]] constexpr bool isRuntimeOutputParam(ParamId id) {
-  return id == ParamId::meterValue;
+  return id == ParamId::meterValue || id == ParamId::inputIntegratedValue || id == ParamId::outputIntegratedValue ||
+         id == ParamId::outputShortTermValue || id == ParamId::gainReductionValue;
 }
 
 [[nodiscard]] constexpr bool isAutomatableStateParam(ParamId id) {
-  return id != ParamId::meterValue;
+  return !isRuntimeOutputParam(id);
 }
 
 }  // namespace gainpilot::vst3

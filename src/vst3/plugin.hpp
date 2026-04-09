@@ -38,6 +38,10 @@ public:
 private:
   void applyInputParameterChanges(Steinberg::Vst::IParameterChanges* changes);
   void pushMeterOutput(Steinberg::Vst::IParameterChanges* changes);
+  void pushOutputParameter(Steinberg::Vst::IParameterChanges* changes,
+                           ParamId id,
+                           Steinberg::Vst::ParamValue plainValue,
+                           std::size_t cacheIndex);
   void ensureScratchCapacity(std::size_t samples);
   [[nodiscard]] bool resetForTransportDiscontinuity(const Steinberg::Vst::ProcessData& data);
   void applyNormalizedParameter(Steinberg::Vst::ParamID tag, Steinberg::Vst::ParamValue value);
@@ -48,7 +52,7 @@ private:
   gainpilot::ParameterState parameterState_{};
   gainpilot::dsp::GainPilotProcessor processor_{};
   Steinberg::uint32 latencySamples_{0};
-  Steinberg::Vst::ParamValue lastMeterNormalized_{0.0};
+  std::array<Steinberg::Vst::ParamValue, 5> lastRuntimeOutputNormalized_{};
   std::optional<Steinberg::int64> lastProjectTimeSamples_{};
   std::array<std::vector<float>, ChannelCount> tempInputs_{};
   std::array<std::vector<float>, ChannelCount> tempOutputs_{};

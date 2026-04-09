@@ -91,12 +91,15 @@ constexpr float kMediumMaxGainDb = 10.0f;
 constexpr float kSlowMaxAttenuationDb = 6.0f;
 constexpr float kSlowMaxGainDb = 6.0f;
 constexpr float kMediumMomentaryWeight = 0.65f;
+constexpr float kSpeechMediumMomentaryWeight = 0.35f;
 constexpr float kIntegratedTrimMaxDb = 8.0f;
 constexpr std::size_t kIntegratedTrimReadyBlocks = 30;
 constexpr std::size_t kInputLevelReadyBlocks = 30;
 constexpr float kAutoFreezeOffsetLufs = 27.0f;
 constexpr float kAutoFreezeMinLufs = -60.0f;
 constexpr float kAutoFreezeMaxLufs = -35.0f;
+constexpr float kSpeechFastTransientThresholdDb = 3.0f;
+constexpr float kSpeechFastMaxAttenuationDb = 3.0f;
 
 float dbToLinear(float valueDb) {
   return std::pow(10.0f, valueDb / 20.0f);
@@ -129,6 +132,10 @@ void GainPilotProcessor::prepare(double sampleRate, std::size_t channelCount, st
   mediumReleaseCoeff_ = makeCoeff(sampleRate_, 1.200f);
   slowAttackCoeff_ = makeCoeff(sampleRate_, 0.750f);
   slowReleaseCoeff_ = makeCoeff(sampleRate_, 4.000f);
+  speechMediumAttackCoeff_ = makeCoeff(sampleRate_, 0.180f);
+  speechMediumReleaseCoeff_ = makeCoeff(sampleRate_, 1.800f);
+  speechSlowAttackCoeff_ = makeCoeff(sampleRate_, 1.100f);
+  speechSlowReleaseCoeff_ = makeCoeff(sampleRate_, 5.500f);
   integratedTrimAttackCoeff_ = makeCoeff(sampleRate_, 2.000f);
   integratedTrimReleaseCoeff_ = makeCoeff(sampleRate_, 10.000f);
   inputLevelAttackCoeff_ = makeCoeff(sampleRate_, 3.000f);
@@ -146,6 +153,7 @@ void GainPilotProcessor::reset() {
   mediumGainDb_ = 0.0f;
   slowGainDb_ = 0.0f;
   integratedTrimGainDb_ = 0.0f;
+  currentGainReductionDb_ = 0.0f;
   fastTargetGainDb_ = 0.0f;
   mediumTargetGainDb_ = 0.0f;
   slowTargetGainDb_ = 0.0f;
@@ -185,6 +193,10 @@ float GainPilotProcessor::freezeThresholdLufs() const {
   return std::clamp(effectiveInputLevelLufs() - kAutoFreezeOffsetLufs, kAutoFreezeMinLufs, kAutoFreezeMaxLufs);
 }
 
+bool GainPilotProcessor::speechModeEnabled() const {
+  return static_cast<ProgramMode>(static_cast<int>(parameters_.get(ParamId::programMode))) == ProgramMode::speech;
+}
+
 float GainPilotProcessor::correctionMix(bool useHighBranch) const {
   (void)useHighBranch;
   return 1.0f;
@@ -205,6 +217,11 @@ void GainPilotProcessor::updateMeterResetLatch() {
   if (resetHigh && !resetWasHigh_) {
     meter_.resetIntegrated();
     outputMeter_.resetIntegrated();
+    learnedInputLevelLufs_ = parameters_.get(ParamId::inputLevel);
+    integratedTrimGainDb_ = 0.0f;
+    integratedTrimTargetGainDb_ = 0.0f;
+    currentMeterValue_ = -70.0f;
+    currentGainReductionDb_ = 0.0f;
   }
   resetWasHigh_ = resetHigh;
 }
@@ -234,9 +251,10 @@ void GainPilotProcessor::updateAutoHoldGate(float detectorLufs) {
 void GainPilotProcessor::process(const ProcessBuffer& buffer) {
   updateMeterResetLatch();
   limiter_.setCeilingDb(parameters_.get(ParamId::truePeak));
-  const auto meterMode = static_cast<MeterMode>(static_cast<int>(parameters_.get(ParamId::meterMode)));
+  const bool speechMode = speechModeEnabled();
   const bool limiterOnly =
       parameters_.get(ParamId::correctionHigh) <= 0.0f && parameters_.get(ParamId::correctionLow) <= 0.0f;
+  const float inputTrimLinear = dbToLinear(parameters_.get(ParamId::inputTrim));
   if (limiterOnly) {
     fastTargetGainDb_ = 0.0f;
     mediumTargetGainDb_ = 0.0f;
@@ -246,7 +264,7 @@ void GainPilotProcessor::process(const ProcessBuffer& buffer) {
 
   for (std::size_t frame = 0; frame < buffer.frames; ++frame) {
     for (std::size_t channel = 0; channel < channelCount_; ++channel) {
-      frameInput_[channel] = buffer.inputs[channel][frame];
+      frameInput_[channel] = buffer.inputs[channel][frame] * inputTrimLinear;
     }
 
     const float baselineGainDb = std::clamp(fixedGainDb(), kMinGainDb, parameters_.get(ParamId::maxGain));
@@ -262,16 +280,19 @@ void GainPilotProcessor::process(const ProcessBuffer& buffer) {
       const float inputReferenceLufs = effectiveInputLevelLufs();
       const float highMix = correctionMix(true);
       const float targetLevel = parameters_.get(ParamId::targetLevel);
+      const float mediumMomentaryWeight = speechMode ? kSpeechMediumMomentaryWeight : kMediumMomentaryWeight;
       const float mediumDetectorLufs =
-          inputSlowDetectorLufs + kMediumMomentaryWeight * (inputFastDetectorLufs - inputSlowDetectorLufs);
+          inputSlowDetectorLufs + mediumMomentaryWeight * (inputFastDetectorLufs - inputSlowDetectorLufs);
       const float slowDesiredTotalGainDb = computeDesiredTotalGainDb(inputSlowDetectorLufs);
       const float mediumDesiredTotalGainDb = computeDesiredTotalGainDb(mediumDetectorLufs);
 
       updateAutoHoldGate(inputSlowDetectorLufs);
 
       const float fastExcessDb = inputFastDetectorLufs - std::max(inputSlowDetectorLufs, inputReferenceLufs);
+      const float fastTransientThresholdDb = speechMode ? kSpeechFastTransientThresholdDb : kFastTransientThresholdDb;
+      const float fastMaxAttenuationDb = speechMode ? kSpeechFastMaxAttenuationDb : kFastMaxAttenuationDb;
       fastTargetGainDb_ =
-          -highMix * std::clamp(fastExcessDb - kFastTransientThresholdDb, 0.0f, kFastMaxAttenuationDb);
+          -highMix * std::clamp(fastExcessDb - fastTransientThresholdDb, 0.0f, fastMaxAttenuationDb);
 
       slowTargetGainDb_ =
           std::clamp(slowDesiredTotalGainDb - baselineGainDb, -kSlowMaxAttenuationDb, kSlowMaxGainDb);
@@ -299,8 +320,16 @@ void GainPilotProcessor::process(const ProcessBuffer& buffer) {
     }
 
     fastGainDb_ = smoothTowards(fastGainDb_, fastTargetGainDb_, fastAttackCoeff_, fastReleaseCoeff_);
-    mediumGainDb_ = smoothTowards(mediumGainDb_, mediumTargetGainDb_, mediumAttackCoeff_, mediumReleaseCoeff_);
-    slowGainDb_ = smoothTowards(slowGainDb_, slowTargetGainDb_, slowAttackCoeff_, slowReleaseCoeff_);
+    mediumGainDb_ = smoothTowards(
+        mediumGainDb_,
+        mediumTargetGainDb_,
+        speechMode ? speechMediumAttackCoeff_ : mediumAttackCoeff_,
+        speechMode ? speechMediumReleaseCoeff_ : mediumReleaseCoeff_);
+    slowGainDb_ = smoothTowards(
+        slowGainDb_,
+        slowTargetGainDb_,
+        speechMode ? speechSlowAttackCoeff_ : slowAttackCoeff_,
+        speechMode ? speechSlowReleaseCoeff_ : slowReleaseCoeff_);
     integratedTrimGainDb_ = smoothTowards(
         integratedTrimGainDb_, integratedTrimTargetGainDb_, integratedTrimAttackCoeff_, integratedTrimReleaseCoeff_);
 
@@ -316,7 +345,11 @@ void GainPilotProcessor::process(const ProcessBuffer& buffer) {
     }
   }
 
-  currentMeterValue_ = meter_.loudnessForMode(meterMode);
+  currentMeterValue_ = meter_.integratedLufs();
+  currentGainReductionDb_ =
+      std::max(0.0f,
+               -(std::min(0.0f, fastGainDb_) + std::min(0.0f, mediumGainDb_) + std::min(0.0f, slowGainDb_) +
+                 std::min(0.0f, integratedTrimGainDb_)));
 }
 
 float GainPilotProcessor::currentMeterValue() const {
@@ -345,6 +378,10 @@ float GainPilotProcessor::currentOutputIntegratedLufs() const {
 
 float GainPilotProcessor::currentOutputShortTermLufs() const {
   return outputMeter_.shortTermLufs();
+}
+
+float GainPilotProcessor::currentGainReductionDb() const {
+  return currentGainReductionDb_;
 }
 
 }  // namespace gainpilot::dsp

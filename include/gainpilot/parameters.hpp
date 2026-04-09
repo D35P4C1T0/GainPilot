@@ -19,6 +19,12 @@ enum class ParamId : std::uint32_t {
   meterMode,
   meterReset,
   meterValue,
+  inputTrim,
+  programMode,
+  inputIntegratedValue,
+  outputIntegratedValue,
+  outputShortTermValue,
+  gainReductionValue,
   count
 };
 
@@ -26,6 +32,11 @@ enum class MeterMode : std::uint32_t {
   momentary = 0,
   shortTerm = 1,
   integrated = 2
+};
+
+enum class ProgramMode : std::uint32_t {
+  automatic = 0,
+  speech = 1
 };
 
 struct ParameterSpec {
@@ -49,8 +60,14 @@ inline constexpr std::array kParameterSpecs{
     ParameterSpec{ParamId::correctionLow, "correction_low", "Correction Low", 0.0f, 100.0f, 100.0f, true, false},
     ParameterSpec{ParamId::corrMixMode, "corr_mix_mode", "Corr Mix Mode", 0.0f, 3.0f, 0.0f, true, false},
     ParameterSpec{ParamId::meterMode, "meter_mode", "Meter Mode", 0.0f, 2.0f, 2.0f, true, false},
-    ParameterSpec{ParamId::meterReset, "meter_reset", "Meter Reset", 0.0f, 1.0f, 0.0f, true, false},
-    ParameterSpec{ParamId::meterValue, "meter_value", "Meter Value", -70.0f, 10.0f, -70.0f, false, true},
+    ParameterSpec{ParamId::meterReset, "meter_reset", "Reset / Relearn", 0.0f, 1.0f, 0.0f, true, false},
+    ParameterSpec{ParamId::meterValue, "meter_value", "Input Loudness", -70.0f, 10.0f, -70.0f, false, true},
+    ParameterSpec{ParamId::inputTrim, "input_trim", "Input Trim", -12.0f, 12.0f, 0.0f, true, false},
+    ParameterSpec{ParamId::programMode, "program_mode", "Program Mode", 0.0f, 1.0f, 0.0f, true, false},
+    ParameterSpec{ParamId::inputIntegratedValue, "input_integrated_value", "Input LUFS-I", -70.0f, 10.0f, -70.0f, false, true},
+    ParameterSpec{ParamId::outputIntegratedValue, "output_integrated_value", "Output LUFS-I", -70.0f, 10.0f, -70.0f, false, true},
+    ParameterSpec{ParamId::outputShortTermValue, "output_short_term_value", "Output Short-Term", -70.0f, 10.0f, -70.0f, false, true},
+    ParameterSpec{ParamId::gainReductionValue, "gain_reduction_value", "Gain Reduction", 0.0f, 24.0f, 0.0f, false, true},
 };
 
 inline constexpr std::size_t kNumParameters = kParameterSpecs.size();
