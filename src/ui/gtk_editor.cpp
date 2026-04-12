@@ -36,43 +36,47 @@ void ensureGtkCss() {
     auto* provider = gtk_css_provider_new();
     const char* css = R"css(
       .gainpilot-root {
-        background: #f2eddc;
-        color: #2d2419;
-        padding: 14px;
+        background: #282c34;
+        color: #abb2bf;
+        padding: 8px;
       }
       .gainpilot-panel {
-        background: #fffaf0;
-        border: 1px solid #d5c4aa;
+        background: #21252b;
+        border: 1px solid #3e4451;
         border-radius: 12px;
-        padding: 14px;
+        padding: 8px;
       }
       .gainpilot-title {
         font-weight: 700;
-        font-size: 20px;
-        color: #2d2419;
+        font-size: 18px;
+        color: #e5c07b;
       }
       .gainpilot-subtitle {
-        color: #6d5f4d;
+        font-size: 11px;
+        color: #5c6370;
       }
       .gainpilot-section {
         font-weight: 700;
-        color: #2d2419;
+        font-size: 12px;
+        color: #abb2bf;
       }
       .gainpilot-readout {
         font-weight: 700;
-        color: #c55d1e;
-        background: #fffef9;
-        border: 1px solid #c5b598;
+        font-size: 12px;
+        color: #d19a66;
+        background: #2c313c;
+        border: 1px solid #4b5263;
         border-radius: 8px;
-        padding: 6px 10px;
+        padding: 3px 7px;
       }
       .gainpilot-badge {
         font-weight: 700;
-        color: #c55d1e;
-        background: #fffef9;
-        border: 1px solid #c5b598;
+        font-size: 12px;
+        color: #61afef;
+        background: #2c313c;
+        border: 1px solid #4b5263;
         border-radius: 999px;
-        padding: 6px 12px;
+        padding: 3px 8px;
       }
     )css";
     gtk_css_provider_load_from_data(provider, css, -1, nullptr);
@@ -192,20 +196,28 @@ void GainPilotGtkEditor::setLatencySamples(float latencySamples) {
 }
 
 void GainPilotGtkEditor::build(const char* badgeText) {
-  root_ = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 18);
-  gtk_widget_set_size_request(root_, 860, 520);
+  root_ = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
   gtk_style_context_add_class(gtk_widget_get_style_context(root_), "gainpilot-root");
+  gtk_widget_set_hexpand(root_, TRUE);
+  gtk_widget_set_vexpand(root_, TRUE);
+  gtk_widget_set_halign(root_, GTK_ALIGN_FILL);
+  gtk_widget_set_valign(root_, GTK_ALIGN_FILL);
 
   auto* meterPanel = createPanel();
-  gtk_box_pack_start(GTK_BOX(root_), meterPanel, FALSE, FALSE, 0);
+  gtk_widget_set_vexpand(meterPanel, TRUE);
+  gtk_box_pack_start(GTK_BOX(root_), meterPanel, FALSE, TRUE, 0);
 
-  auto* contentColumn = gtk_box_new(GTK_ORIENTATION_VERTICAL, 16);
+  auto* contentColumn = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+  gtk_widget_set_hexpand(contentColumn, TRUE);
+  gtk_widget_set_vexpand(contentColumn, TRUE);
   gtk_box_pack_start(GTK_BOX(root_), contentColumn, TRUE, TRUE, 0);
 
   buildMeterPanel(meterPanel);
   buildHeader(contentColumn, badgeText);
 
-  auto* controlsRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 16);
+  auto* controlsRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+  gtk_widget_set_hexpand(controlsRow, TRUE);
+  gtk_widget_set_vexpand(controlsRow, TRUE);
   gtk_box_pack_start(GTK_BOX(contentColumn), controlsRow, TRUE, TRUE, 0);
 
   buildTargetPanel(controlsRow);
@@ -215,14 +227,14 @@ void GainPilotGtkEditor::build(const char* badgeText) {
 }
 
 void GainPilotGtkEditor::buildMeterPanel(GtkWidget* panel) {
-  auto* box = createPanelBox(panel, GTK_ORIENTATION_VERTICAL, 14);
+  auto* box = createPanelBox(panel, GTK_ORIENTATION_VERTICAL, 8);
 
   gtk_box_pack_start(GTK_BOX(box), createLabel("GAIN REDUCTION", "gainpilot-title", 0.5f), FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(box), createLabel("Live readout", "gainpilot-subtitle", 0.5f), FALSE, FALSE, 0);
 
   meterBar_ = gtk_level_bar_new_for_interval(0.0, 24.0);
   gtk_orientable_set_orientation(GTK_ORIENTABLE(meterBar_), GTK_ORIENTATION_VERTICAL);
-  gtk_widget_set_size_request(meterBar_, 54, 250);
+  gtk_widget_set_size_request(meterBar_, 44, 204);
   gtk_level_bar_set_value(GTK_LEVEL_BAR(meterBar_), 0.0);
   gtk_box_pack_start(GTK_BOX(box), meterBar_, TRUE, TRUE, 0);
 
@@ -246,12 +258,12 @@ void GainPilotGtkEditor::buildHeader(GtkWidget* parent, const char* badgeText) {
   auto* panel = createPanel();
   gtk_box_pack_start(GTK_BOX(parent), panel, FALSE, FALSE, 0);
 
-  auto* row = createPanelBox(panel, GTK_ORIENTATION_HORIZONTAL, 12);
+  auto* row = createPanelBox(panel, GTK_ORIENTATION_HORIZONTAL, 8);
 
-  auto* heading = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+  auto* heading = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
   gtk_box_pack_start(GTK_BOX(heading), createLabel("GainPilot", "gainpilot-title"), FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(heading),
-                     createLabel("Auto leveling with trim, speech mode, and relearn", "gainpilot-subtitle"),
+                     createLabel("Trim, speech mode, and live loudness feedback", "gainpilot-subtitle"),
                      FALSE,
                      FALSE,
                      0);
@@ -266,7 +278,7 @@ void GainPilotGtkEditor::buildTargetPanel(GtkWidget* parent) {
   gtk_widget_set_hexpand(panel, TRUE);
   gtk_box_pack_start(GTK_BOX(parent), panel, TRUE, TRUE, 0);
 
-  auto* box = createPanelBox(panel, GTK_ORIENTATION_VERTICAL, 12);
+  auto* box = createPanelBox(panel, GTK_ORIENTATION_VERTICAL, 8);
   gtk_box_pack_start(GTK_BOX(box), createLabel("Level Targeting", "gainpilot-section"), FALSE, FALSE, 0);
 
   addSlider(box, ParamId::targetLevel);
@@ -279,7 +291,7 @@ void GainPilotGtkEditor::buildDynamicsPanel(GtkWidget* parent) {
   gtk_widget_set_hexpand(panel, TRUE);
   gtk_box_pack_start(GTK_BOX(parent), panel, TRUE, TRUE, 0);
 
-  auto* box = createPanelBox(panel, GTK_ORIENTATION_VERTICAL, 12);
+  auto* box = createPanelBox(panel, GTK_ORIENTATION_VERTICAL, 8);
   gtk_box_pack_start(GTK_BOX(box), createLabel("Dynamics & Ceiling", "gainpilot-section"), FALSE, FALSE, 0);
 
   addSlider(box, ParamId::truePeak);
@@ -295,10 +307,10 @@ void GainPilotGtkEditor::addSlider(GtkWidget* parent, ParamId param) {
   auto& binding = sliders_[sliderIndex(param)];
   binding.param = param;
 
-  auto* row = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+  auto* row = gtk_box_new(GTK_ORIENTATION_VERTICAL, 1);
   gtk_box_pack_start(GTK_BOX(parent), row, FALSE, FALSE, 0);
 
-  auto* headerRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+  auto* headerRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
   gtk_box_pack_start(GTK_BOX(row), headerRow, FALSE, FALSE, 0);
 
   auto* label = gtk_label_new(spec.name.data());

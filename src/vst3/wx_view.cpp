@@ -1,6 +1,7 @@
 #include "wx_view.hpp"
 
 #include <array>
+#include <cmath>
 #include <cstdint>
 
 #include <wx/init.h>
@@ -16,7 +17,7 @@ namespace gainpilot::vst3 {
 
 namespace {
 
-const Steinberg::ViewRect kDefaultViewRect{0, 0, 860, 520};
+const Steinberg::ViewRect kDefaultViewRect{0, 0, 800, 470};
 constexpr std::array<ParamId, 10> kUiParameters{
     ParamId::targetLevel,
     ParamId::truePeak,
@@ -121,6 +122,14 @@ Steinberg::tresult PLUGIN_API GainPilotWxView::onSize(Steinberg::ViewRect* newSi
     container_->Layout();
   }
   return result;
+}
+
+Steinberg::tresult PLUGIN_API GainPilotWxView::canResize() {
+  return Steinberg::kResultTrue;
+}
+
+Steinberg::tresult PLUGIN_API GainPilotWxView::checkSizeConstraint(Steinberg::ViewRect* rect) {
+  return rect != nullptr ? Steinberg::kResultTrue : Steinberg::kResultFalse;
 }
 
 bool GainPilotWxView::createHostContainer(void* parent, Steinberg::FIDString type) {

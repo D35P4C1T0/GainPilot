@@ -61,7 +61,7 @@ namespace gainpilot::vst3 {
 
 namespace {
 
-const Steinberg::ViewRect kDefaultViewRect{0, 0, 720, 460};
+const Steinberg::ViewRect kDefaultViewRect{0, 0, 800, 470};
 constexpr std::array<ParamId, 4> kVisibleParams{
     ParamId::targetLevel,
     ParamId::truePeak,
@@ -99,6 +99,38 @@ NSString* formatLatency(float latencyMs) {
 
 NSColor* color(double red, double green, double blue) {
   return [NSColor colorWithCalibratedRed:red green:green blue:blue alpha:1.0];
+}
+
+NSColor* canvasColor() {
+  return color(0.16, 0.17, 0.20);
+}
+
+NSColor* panelColor() {
+  return color(0.13, 0.15, 0.17);
+}
+
+NSColor* borderColor() {
+  return color(0.24, 0.27, 0.32);
+}
+
+NSColor* titleColor() {
+  return color(0.90, 0.75, 0.48);
+}
+
+NSColor* textColor() {
+  return color(0.67, 0.70, 0.75);
+}
+
+NSColor* subtleColor() {
+  return color(0.36, 0.39, 0.44);
+}
+
+NSColor* accentColor() {
+  return color(0.82, 0.60, 0.40);
+}
+
+NSColor* badgeColor() {
+  return color(0.38, 0.69, 0.94);
 }
 
 }  // namespace
@@ -161,30 +193,30 @@ Steinberg::tresult PLUGIN_API GainPilotMacView::attached(void* parent, Steinberg
   impl_->root = [[NSView alloc] initWithFrame:NSMakeRect(0.0, 0.0, width, height)];
   impl_->root.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
   impl_->root.wantsLayer = YES;
-  impl_->root.layer.backgroundColor = color(0.95, 0.93, 0.86).CGColor;
+  impl_->root.layer.backgroundColor = canvasColor().CGColor;
 
   impl_->headerLabel = [NSTextField labelWithString:@"GainPilot"];
   impl_->headerLabel.font = [NSFont boldSystemFontOfSize:22.0];
-  impl_->headerLabel.textColor = color(0.18, 0.14, 0.10);
+  impl_->headerLabel.textColor = titleColor();
   [impl_->root addSubview:impl_->headerLabel];
 
   impl_->subtitleLabel =
-      [NSTextField labelWithString:@"Target, trim, speech mode, and relearn with live input/output loudness feedback."];
+      [NSTextField labelWithString:@"Trim, speech mode, and live input/output loudness feedback."];
   impl_->subtitleLabel.font = [NSFont systemFontOfSize:12.0];
-  impl_->subtitleLabel.textColor = color(0.43, 0.37, 0.30);
+  impl_->subtitleLabel.textColor = subtleColor();
   [impl_->root addSubview:impl_->subtitleLabel];
 
   impl_->meterPanel = [[NSBox alloc] initWithFrame:NSMakeRect(24.0, 24.0, 220.0, height - 110.0)];
   impl_->meterPanel.boxType = NSBoxCustom;
   impl_->meterPanel.borderWidth = 1.0;
   impl_->meterPanel.cornerRadius = 14.0;
-  impl_->meterPanel.borderColor = color(0.83, 0.77, 0.67);
-  impl_->meterPanel.fillColor = color(1.0, 0.98, 0.94);
+  impl_->meterPanel.borderColor = borderColor();
+  impl_->meterPanel.fillColor = panelColor();
   [impl_->root addSubview:impl_->meterPanel];
 
   impl_->meterTitleLabel = [NSTextField labelWithString:@"Gain Reduction"];
   impl_->meterTitleLabel.font = [NSFont boldSystemFontOfSize:14.0];
-  impl_->meterTitleLabel.textColor = color(0.18, 0.14, 0.10);
+  impl_->meterTitleLabel.textColor = titleColor();
   [impl_->meterPanel.contentView addSubview:impl_->meterTitleLabel];
 
   impl_->meterLevel =
@@ -198,37 +230,37 @@ Steinberg::tresult PLUGIN_API GainPilotMacView::attached(void* parent, Steinberg
 
   impl_->gainReductionLabel = [NSTextField labelWithString:@"0.00 dB"];
   impl_->gainReductionLabel.font = [NSFont boldSystemFontOfSize:18.0];
-  impl_->gainReductionLabel.textColor = color(0.77, 0.36, 0.12);
+  impl_->gainReductionLabel.textColor = accentColor();
   impl_->gainReductionLabel.alignment = NSTextAlignmentCenter;
   [impl_->meterPanel.contentView addSubview:impl_->gainReductionLabel];
 
   impl_->meterValueLabel = [NSTextField labelWithString:@"In: -70.00 LUFS-I"];
   impl_->meterValueLabel.font = [NSFont systemFontOfSize:12.0];
-  impl_->meterValueLabel.textColor = color(0.18, 0.14, 0.10);
+  impl_->meterValueLabel.textColor = textColor();
   impl_->meterValueLabel.alignment = NSTextAlignmentCenter;
   [impl_->meterPanel.contentView addSubview:impl_->meterValueLabel];
 
   impl_->inputIntegratedLabel = [NSTextField labelWithString:@"Input: -70.00 LUFS-I"];
   impl_->inputIntegratedLabel.font = [NSFont systemFontOfSize:12.0];
-  impl_->inputIntegratedLabel.textColor = color(0.18, 0.14, 0.10);
+  impl_->inputIntegratedLabel.textColor = textColor();
   impl_->inputIntegratedLabel.alignment = NSTextAlignmentCenter;
   [impl_->meterPanel.contentView addSubview:impl_->inputIntegratedLabel];
 
   impl_->outputIntegratedLabel = [NSTextField labelWithString:@"Output: -70.00 LUFS-I"];
   impl_->outputIntegratedLabel.font = [NSFont systemFontOfSize:12.0];
-  impl_->outputIntegratedLabel.textColor = color(0.18, 0.14, 0.10);
+  impl_->outputIntegratedLabel.textColor = textColor();
   impl_->outputIntegratedLabel.alignment = NSTextAlignmentCenter;
   [impl_->meterPanel.contentView addSubview:impl_->outputIntegratedLabel];
 
   impl_->outputShortTermLabel = [NSTextField labelWithString:@"Short-Term: -70.00 LUFS"];
   impl_->outputShortTermLabel.font = [NSFont systemFontOfSize:12.0];
-  impl_->outputShortTermLabel.textColor = color(0.18, 0.14, 0.10);
+  impl_->outputShortTermLabel.textColor = textColor();
   impl_->outputShortTermLabel.alignment = NSTextAlignmentCenter;
   [impl_->meterPanel.contentView addSubview:impl_->outputShortTermLabel];
 
   impl_->latencyLabel = [NSTextField labelWithString:@"Latency: --"];
   impl_->latencyLabel.font = [NSFont systemFontOfSize:12.0];
-  impl_->latencyLabel.textColor = color(0.43, 0.37, 0.30);
+  impl_->latencyLabel.textColor = subtleColor();
   impl_->latencyLabel.alignment = NSTextAlignmentCenter;
   [impl_->meterPanel.contentView addSubview:impl_->latencyLabel];
 
@@ -236,13 +268,13 @@ Steinberg::tresult PLUGIN_API GainPilotMacView::attached(void* parent, Steinberg
   impl_->controlsPanel.boxType = NSBoxCustom;
   impl_->controlsPanel.borderWidth = 1.0;
   impl_->controlsPanel.cornerRadius = 14.0;
-  impl_->controlsPanel.borderColor = color(0.83, 0.77, 0.67);
-  impl_->controlsPanel.fillColor = color(1.0, 0.98, 0.94);
+  impl_->controlsPanel.borderColor = borderColor();
+  impl_->controlsPanel.fillColor = panelColor();
   [impl_->root addSubview:impl_->controlsPanel];
 
   impl_->controlsTitleLabel = [NSTextField labelWithString:@"Controls"];
   impl_->controlsTitleLabel.font = [NSFont boldSystemFontOfSize:14.0];
-  impl_->controlsTitleLabel.textColor = color(0.18, 0.14, 0.10);
+  impl_->controlsTitleLabel.textColor = titleColor();
   [impl_->controlsPanel.contentView addSubview:impl_->controlsTitleLabel];
 
   for (std::size_t index = 0; index < kVisibleParams.size(); ++index) {
@@ -251,13 +283,13 @@ Steinberg::tresult PLUGIN_API GainPilotMacView::attached(void* parent, Steinberg
 
     auto* label = [NSTextField labelWithString:[NSString stringWithUTF8String:spec.name.data()]];
     label.font = [NSFont systemFontOfSize:13.0 weight:NSFontWeightSemibold];
-    label.textColor = color(0.18, 0.14, 0.10);
+    label.textColor = textColor();
     [impl_->controlsPanel.contentView addSubview:label];
     impl_->paramLabels[index] = label;
 
     auto* valueLabel = [NSTextField labelWithString:formatParamValue(param, spec.defaultValue)];
     valueLabel.font = [NSFont boldSystemFontOfSize:13.0];
-    valueLabel.textColor = color(0.77, 0.36, 0.12);
+    valueLabel.textColor = accentColor();
     valueLabel.alignment = NSTextAlignmentRight;
     [impl_->controlsPanel.contentView addSubview:valueLabel];
     impl_->valueLabels[index] = valueLabel;
@@ -275,7 +307,7 @@ Steinberg::tresult PLUGIN_API GainPilotMacView::attached(void* parent, Steinberg
 
   impl_->programModeLabel = [NSTextField labelWithString:@"Program Mode"];
   impl_->programModeLabel.font = [NSFont systemFontOfSize:13.0 weight:NSFontWeightSemibold];
-  impl_->programModeLabel.textColor = color(0.18, 0.14, 0.10);
+  impl_->programModeLabel.textColor = textColor();
   [impl_->controlsPanel.contentView addSubview:impl_->programModeLabel];
 
   impl_->programModePopup = [[NSPopUpButton alloc] initWithFrame:NSMakeRect(20.0, 20.0, 160.0, 28.0)];
@@ -315,11 +347,23 @@ Steinberg::tresult PLUGIN_API GainPilotMacView::removed() {
 }
 
 Steinberg::tresult PLUGIN_API GainPilotMacView::onSize(Steinberg::ViewRect* newSize) {
+  if (newSize == nullptr) {
+    return Steinberg::kResultFalse;
+  }
+
   const auto result = Steinberg::CPluginView::onSize(newSize);
-  if (impl_ != nullptr && impl_->root != nil && newSize != nullptr) {
+  if (impl_ != nullptr && impl_->root != nil) {
     layoutUi(static_cast<float>(newSize->getWidth()), static_cast<float>(newSize->getHeight()));
   }
   return result;
+}
+
+Steinberg::tresult PLUGIN_API GainPilotMacView::canResize() {
+  return Steinberg::kResultTrue;
+}
+
+Steinberg::tresult PLUGIN_API GainPilotMacView::checkSizeConstraint(Steinberg::ViewRect* rect) {
+  return rect != nullptr ? Steinberg::kResultTrue : Steinberg::kResultFalse;
 }
 
 void GainPilotMacView::handleSliderChanged(ParamId id, float value) {
@@ -389,94 +433,74 @@ void GainPilotMacView::layoutUi(float width, float height) {
     return;
   }
 
+  constexpr CGFloat kBaseWidth = 800.0;
+  constexpr CGFloat kBaseHeight = 470.0;
+  constexpr CGFloat kViewportInset = 6.0;
   const CGFloat viewWidth = std::max<CGFloat>(width, 1.0);
   const CGFloat viewHeight = std::max<CGFloat>(height, 1.0);
-  const CGFloat outerMargin = 24.0;
-  const CGFloat panelGap = 16.0;
-  const CGFloat headerTop = 46.0;
-  const CGFloat subtitleTop = 68.0;
-  const CGFloat panelTopInset = 110.0;
-  const bool stackedPanels = viewWidth < 680.0 || viewHeight < 430.0;
+  const CGFloat availableWidth = std::max<CGFloat>(viewWidth - kViewportInset * 2.0, 1.0);
+  const CGFloat availableHeight = std::max<CGFloat>(viewHeight - kViewportInset * 2.0, 1.0);
+  const CGFloat scale = std::min(availableWidth / kBaseWidth, availableHeight / kBaseHeight);
+  const CGFloat contentWidth = kBaseWidth * scale;
+  const CGFloat contentHeight = kBaseHeight * scale;
+  const CGFloat offsetX = std::floor((viewWidth - contentWidth) * 0.5);
+  const CGFloat offsetY = std::floor((viewHeight - contentHeight) * 0.5);
+
+  auto rootRect = [scale, offsetX, offsetY](CGFloat x, CGFloat y, CGFloat w, CGFloat h) {
+    return NSMakeRect(offsetX + x * scale, offsetY + y * scale, w * scale, h * scale);
+  };
+  auto localRect = [scale](CGFloat x, CGFloat y, CGFloat w, CGFloat h) {
+    return NSMakeRect(x * scale, y * scale, w * scale, h * scale);
+  };
+
+  auto scaledFont = [scale](CGFloat size, bool bold = false) {
+    return bold ? [NSFont boldSystemFontOfSize:size * scale] : [NSFont systemFontOfSize:size * scale];
+  };
 
   impl_->root.frame = NSMakeRect(0.0, 0.0, viewWidth, viewHeight);
-  impl_->headerLabel.frame = NSMakeRect(outerMargin, viewHeight - headerTop, 220.0, 28.0);
-  impl_->subtitleLabel.frame = NSMakeRect(outerMargin, viewHeight - subtitleTop, viewWidth - outerMargin * 2.0, 18.0);
 
-  const CGFloat availablePanelHeight = std::max<CGFloat>(viewHeight - panelTopInset, 180.0);
-  if (stackedPanels) {
-    CGFloat meterHeight = std::clamp(availablePanelHeight * 0.40, 90.0, 210.0);
-    CGFloat controlsHeight = availablePanelHeight - meterHeight - panelGap;
-    if (controlsHeight < 140.0) {
-      meterHeight = std::max<CGFloat>(70.0, availablePanelHeight - panelGap - 140.0);
-      controlsHeight = availablePanelHeight - meterHeight - panelGap;
-    }
-    impl_->meterPanel.frame =
-        NSMakeRect(outerMargin, outerMargin + controlsHeight + panelGap, viewWidth - outerMargin * 2.0, meterHeight);
-    impl_->controlsPanel.frame = NSMakeRect(outerMargin, outerMargin, viewWidth - outerMargin * 2.0, controlsHeight);
-  } else {
-    CGFloat meterWidth = std::clamp(viewWidth * 0.30, 190.0, 230.0);
-    CGFloat controlsWidth = viewWidth - outerMargin * 2.0 - panelGap - meterWidth;
-    if (controlsWidth < 300.0) {
-      meterWidth = std::max<CGFloat>(160.0, viewWidth - outerMargin * 2.0 - panelGap - 300.0);
-      controlsWidth = viewWidth - outerMargin * 2.0 - panelGap - meterWidth;
-    }
+  impl_->headerLabel.font = scaledFont(21.0, true);
+  impl_->subtitleLabel.font = scaledFont(11.0);
+  impl_->meterTitleLabel.font = scaledFont(14.0, true);
+  impl_->gainReductionLabel.font = scaledFont(17.0, true);
+  impl_->meterValueLabel.font = scaledFont(11.0);
+  impl_->inputIntegratedLabel.font = scaledFont(11.0);
+  impl_->outputIntegratedLabel.font = scaledFont(11.0);
+  impl_->outputShortTermLabel.font = scaledFont(11.0);
+  impl_->latencyLabel.font = scaledFont(11.0);
+  impl_->controlsTitleLabel.font = scaledFont(14.0, true);
+  impl_->programModeLabel.font = [NSFont systemFontOfSize:12.0 * scale weight:NSFontWeightSemibold];
 
-    impl_->meterPanel.frame = NSMakeRect(outerMargin, outerMargin, meterWidth, availablePanelHeight);
-    impl_->controlsPanel.frame =
-        NSMakeRect(CGRectGetMaxX(impl_->meterPanel.frame) + panelGap, outerMargin, controlsWidth, availablePanelHeight);
-  }
+  impl_->headerLabel.frame = rootRect(18.0, 428.0, 220.0, 26.0);
+  impl_->subtitleLabel.frame = rootRect(18.0, 408.0, 548.0, 16.0);
 
-  const CGFloat meterInnerWidth = impl_->meterPanel.frame.size.width - 24.0;
-  const CGFloat meterPanelHeight = impl_->meterPanel.frame.size.height;
-  impl_->meterTitleLabel.frame = NSMakeRect(16.0, meterPanelHeight - 34.0, meterInnerWidth, 20.0);
-  impl_->gainReductionLabel.frame = NSMakeRect(12.0, meterPanelHeight - 74.0, meterInnerWidth, 26.0);
-  impl_->meterLevel.frame = NSMakeRect(20.0, meterPanelHeight - 108.0, impl_->meterPanel.frame.size.width - 40.0, 20.0);
+  impl_->meterPanel.frame = rootRect(18.0, 18.0, 196.0, 356.0);
+  impl_->controlsPanel.frame = rootRect(228.0, 18.0, 554.0, 356.0);
 
-  const CGFloat latencyY = 26.0;
-  const CGFloat readoutBottomY = latencyY + 34.0;
-  const CGFloat readoutStep = std::clamp((meterPanelHeight - 144.0 - readoutBottomY) / 3.0, 18.0, 24.0);
-  const CGFloat readoutStartY = readoutBottomY + readoutStep * 3.0;
-  impl_->meterValueLabel.frame = NSMakeRect(12.0, readoutStartY, meterInnerWidth, 18.0);
-  impl_->inputIntegratedLabel.frame = NSMakeRect(12.0, readoutStartY - readoutStep, meterInnerWidth, 18.0);
-  impl_->outputIntegratedLabel.frame = NSMakeRect(12.0, readoutStartY - readoutStep * 2.0, meterInnerWidth, 18.0);
-  impl_->outputShortTermLabel.frame = NSMakeRect(12.0, readoutStartY - readoutStep * 3.0, meterInnerWidth, 18.0);
-  impl_->latencyLabel.frame = NSMakeRect(12.0, latencyY, meterInnerWidth, 18.0);
+  impl_->meterTitleLabel.frame = localRect(12.0, 324.0, 172.0, 18.0);
+  impl_->gainReductionLabel.frame = localRect(8.0, 288.0, 180.0, 22.0);
+  impl_->meterLevel.frame = localRect(16.0, 258.0, 164.0, 16.0);
+  impl_->meterValueLabel.frame = localRect(8.0, 118.0, 180.0, 16.0);
+  impl_->inputIntegratedLabel.frame = localRect(8.0, 98.0, 180.0, 16.0);
+  impl_->outputIntegratedLabel.frame = localRect(8.0, 78.0, 180.0, 16.0);
+  impl_->outputShortTermLabel.frame = localRect(8.0, 58.0, 180.0, 16.0);
+  impl_->latencyLabel.frame = localRect(8.0, 22.0, 180.0, 16.0);
 
-  const CGFloat controlsPanelHeight = impl_->controlsPanel.frame.size.height;
-  const CGFloat controlsPanelWidth = impl_->controlsPanel.frame.size.width;
-  const CGFloat controlsInsetX = 20.0;
-  const CGFloat controlsInnerWidth = controlsPanelWidth - controlsInsetX * 2.0;
-  const CGFloat valueLabelWidth = std::min<CGFloat>(170.0, std::max<CGFloat>(120.0, controlsInnerWidth * 0.36));
-  const CGFloat labelWidth = std::max<CGFloat>(140.0, controlsInnerWidth - valueLabelWidth - 12.0);
-  const CGFloat modeControlsY = controlsInnerWidth >= 430.0 ? 24.0 : 60.0;
-  const CGFloat rowPitch =
-      std::clamp((controlsPanelHeight - 110.0 - modeControlsY) / static_cast<CGFloat>(kVisibleParams.size()), 34.0, 54.0);
-  const CGFloat sliderHeight = 24.0;
-  const CGFloat sliderValueGap = 30.0;
+  impl_->controlsTitleLabel.frame = localRect(16.0, 330.0, 150.0, 18.0);
 
-  impl_->controlsTitleLabel.frame = NSMakeRect(controlsInsetX, controlsPanelHeight - 34.0, 160.0, 20.0);
-
+  constexpr std::array<CGFloat, 4> kRowY{268.0, 222.0, 176.0, 130.0};
   for (std::size_t index = 0; index < kVisibleParams.size(); ++index) {
-    const CGFloat rowY = controlsPanelHeight - 92.0 - static_cast<CGFloat>(index) * rowPitch;
-    [impl_->paramLabels[index] setFrame:NSMakeRect(controlsInsetX, rowY + sliderValueGap, labelWidth, 18.0)];
-    [impl_->valueLabels[index]
-        setFrame:NSMakeRect(controlsPanelWidth - controlsInsetX - valueLabelWidth, rowY + sliderValueGap, valueLabelWidth, 18.0)];
-    [impl_->sliders[index] setFrame:NSMakeRect(controlsInsetX, rowY, controlsInnerWidth, sliderHeight)];
+    const CGFloat rowY = kRowY[index];
+    impl_->paramLabels[index].font = [NSFont systemFontOfSize:12.0 * scale weight:NSFontWeightSemibold];
+    impl_->valueLabels[index].font = scaledFont(12.0, true);
+    [impl_->paramLabels[index] setFrame:localRect(16.0, rowY + 24.0, 260.0, 16.0)];
+    [impl_->valueLabels[index] setFrame:localRect(384.0, rowY + 24.0, 102.0, 16.0)];
+    [impl_->sliders[index] setFrame:localRect(16.0, rowY, 418.0, 20.0)];
   }
 
-  const CGFloat modeRowY =
-      std::max<CGFloat>(modeControlsY, controlsPanelHeight - 92.0 - rowPitch * static_cast<CGFloat>(kVisibleParams.size()) - 18.0);
-  impl_->programModeLabel.frame = NSMakeRect(controlsInsetX, modeRowY + 34.0, 160.0, 18.0);
-
-  if (controlsInnerWidth >= 430.0) {
-    const CGFloat popupWidth = std::min<CGFloat>(180.0, controlsInnerWidth * 0.42);
-    impl_->programModePopup.frame = NSMakeRect(controlsInsetX, modeRowY, popupWidth, 28.0);
-    impl_->resetButton.frame =
-        NSMakeRect(controlsPanelWidth - controlsInsetX - 160.0, modeRowY - 2.0, 160.0, 32.0);
-  } else {
-    impl_->programModePopup.frame = NSMakeRect(controlsInsetX, modeRowY, controlsInnerWidth, 28.0);
-    impl_->resetButton.frame = NSMakeRect(controlsInsetX, modeRowY - 40.0, controlsInnerWidth, 32.0);
-  }
+  impl_->programModeLabel.frame = localRect(16.0, 70.0, 150.0, 16.0);
+  impl_->programModePopup.frame = localRect(16.0, 40.0, 166.0, 24.0);
+  impl_->resetButton.frame = localRect(296.0, 38.0, 146.0, 28.0);
 }
 
 void GainPilotMacView::destroyUi() {

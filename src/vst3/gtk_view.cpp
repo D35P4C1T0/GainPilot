@@ -1,6 +1,7 @@
 #include "gtk_view.hpp"
 
 #include <array>
+#include <cmath>
 #include <cstdint>
 
 #include <gtk/gtkx.h>
@@ -16,7 +17,7 @@ namespace gainpilot::vst3 {
 
 namespace {
 
-const Steinberg::ViewRect kDefaultViewRect{0, 0, 860, 520};
+const Steinberg::ViewRect kDefaultViewRect{0, 0, 800, 470};
 constexpr std::array<ParamId, 10> kUiParameters{
     ParamId::targetLevel,
     ParamId::truePeak,
@@ -120,6 +121,14 @@ Steinberg::tresult PLUGIN_API GainPilotGtkView::onSize(Steinberg::ViewRect* newS
     gtk_window_resize(GTK_WINDOW(plug_), newSize->getWidth(), newSize->getHeight());
   }
   return result;
+}
+
+Steinberg::tresult PLUGIN_API GainPilotGtkView::canResize() {
+  return Steinberg::kResultTrue;
+}
+
+Steinberg::tresult PLUGIN_API GainPilotGtkView::checkSizeConstraint(Steinberg::ViewRect* rect) {
+  return rect != nullptr ? Steinberg::kResultTrue : Steinberg::kResultFalse;
 }
 
 void GainPilotGtkView::destroyUi() {

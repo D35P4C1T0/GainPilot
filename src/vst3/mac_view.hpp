@@ -25,6 +25,8 @@ public:
   Steinberg::tresult PLUGIN_API attached(void* parent, Steinberg::FIDString type) SMTG_OVERRIDE;
   Steinberg::tresult PLUGIN_API removed() SMTG_OVERRIDE;
   Steinberg::tresult PLUGIN_API onSize(Steinberg::ViewRect* newSize) SMTG_OVERRIDE;
+  Steinberg::tresult PLUGIN_API canResize() SMTG_OVERRIDE;
+  Steinberg::tresult PLUGIN_API checkSizeConstraint(Steinberg::ViewRect* rect) SMTG_OVERRIDE;
 
   void handleSliderChanged(ParamId id, float value);
   void handleResetClicked();

@@ -21,11 +21,11 @@ constexpr std::array<const char*, 2> kProgramModeLabels{
     "Speech",
 };
 
-const wxColour kCanvas(0xF2, 0xED, 0xDC);
-const wxColour kPanel(0xFF, 0xFA, 0xF0);
-const wxColour kText(0x2D, 0x24, 0x19);
-const wxColour kSubtle(0x6D, 0x5F, 0x4D);
-const wxColour kAccent(0xC5, 0x5D, 0x1E);
+const wxColour kCanvas(0x28, 0x2C, 0x34);
+const wxColour kPanel(0x21, 0x25, 0x2B);
+const wxColour kText(0xAB, 0xB2, 0xBF);
+const wxColour kSubtle(0x5C, 0x63, 0x70);
+const wxColour kAccent(0xD1, 0x9A, 0x66);
 
 std::size_t paramIndex(ParamId id) {
   return static_cast<std::size_t>(id);
@@ -110,23 +110,23 @@ void GainPilotEditorPanel::buildUi() {
   auto* meterSizer = new wxBoxSizer(wxVERTICAL);
   meterPanel->SetSizer(meterSizer);
 
-  meterSizer->Add(makeLabel(meterPanel, "GAIN REDUCTION", true), 0, wxALIGN_CENTER_HORIZONTAL | wxTOP, 8);
-  meterSizer->Add(makeLabel(meterPanel, "Live readout", false, kSubtle), 0, wxALIGN_CENTER_HORIZONTAL | wxBOTTOM, 10);
+  meterSizer->Add(makeLabel(meterPanel, "GAIN REDUCTION", true), 0, wxALIGN_CENTER_HORIZONTAL | wxTOP, 4);
+  meterSizer->Add(makeLabel(meterPanel, "Live readout", false, kSubtle), 0, wxALIGN_CENTER_HORIZONTAL | wxBOTTOM, 6);
 
-  meterGauge_ = new wxGauge(meterPanel, wxID_ANY, 1000, wxDefaultPosition, wxSize(54, 220), wxGA_VERTICAL);
-  meterSizer->Add(meterGauge_, 0, wxALIGN_CENTER_HORIZONTAL | wxBOTTOM, 10);
+  meterGauge_ = new wxGauge(meterPanel, wxID_ANY, 1000, wxDefaultPosition, wxSize(44, 196), wxGA_VERTICAL);
+  meterSizer->Add(meterGauge_, 0, wxALIGN_CENTER_HORIZONTAL | wxBOTTOM, 6);
 
   gainReductionLabel_ = makeLabel(meterPanel, "0.00 dB", true, kAccent);
-  meterSizer->Add(gainReductionLabel_, 0, wxALIGN_CENTER_HORIZONTAL | wxBOTTOM, 8);
+  meterSizer->Add(gainReductionLabel_, 0, wxALIGN_CENTER_HORIZONTAL | wxBOTTOM, 4);
 
   meterValueLabel_ = makeLabel(meterPanel, "In: -70.00 LUFS-I", false, kText);
-  meterSizer->Add(meterValueLabel_, 0, wxALIGN_CENTER_HORIZONTAL | wxBOTTOM, 12);
+  meterSizer->Add(meterValueLabel_, 0, wxALIGN_CENTER_HORIZONTAL | wxBOTTOM, 6);
   inputIntegratedLabel_ = makeLabel(meterPanel, "Input: -70.00 LUFS-I", false, kText);
-  meterSizer->Add(inputIntegratedLabel_, 0, wxALIGN_CENTER_HORIZONTAL | wxBOTTOM, 6);
+  meterSizer->Add(inputIntegratedLabel_, 0, wxALIGN_CENTER_HORIZONTAL | wxBOTTOM, 3);
   outputIntegratedLabel_ = makeLabel(meterPanel, "Output: -70.00 LUFS-I", false, kText);
-  meterSizer->Add(outputIntegratedLabel_, 0, wxALIGN_CENTER_HORIZONTAL | wxBOTTOM, 6);
+  meterSizer->Add(outputIntegratedLabel_, 0, wxALIGN_CENTER_HORIZONTAL | wxBOTTOM, 3);
   outputShortTermLabel_ = makeLabel(meterPanel, "Short-Term: -70.00 LUFS", false, kText);
-  meterSizer->Add(outputShortTermLabel_, 0, wxALIGN_CENTER_HORIZONTAL | wxBOTTOM, 6);
+  meterSizer->Add(outputShortTermLabel_, 0, wxALIGN_CENTER_HORIZONTAL | wxBOTTOM, 3);
 
   auto* contentSizer = new wxBoxSizer(wxVERTICAL);
   auto* headerPanel = new wxPanel(this, wxID_ANY);
@@ -134,16 +134,18 @@ void GainPilotEditorPanel::buildUi() {
   headerPanel->SetSizer(headerSizer);
 
   auto* titleSizer = new wxBoxSizer(wxVERTICAL);
-  titleSizer->Add(makeLabel(headerPanel, "GainPilot", true), 0, wxBOTTOM, 4);
-  titleSizer->Add(makeLabel(headerPanel, "Auto leveling with trim, speech mode, and relearn", false, kSubtle), 0);
+  titleSizer->Add(makeLabel(headerPanel, "GainPilot", true), 0, wxBOTTOM, 1);
+  titleSizer->Add(makeLabel(headerPanel, "Trim, speech mode, and live loudness feedback", false, kSubtle), 0);
   headerSizer->Add(titleSizer, 1, wxEXPAND);
-  headerSizer->Add(makeLabel(headerPanel, "Mono / Stereo", true, kAccent), 0, wxALIGN_CENTER_VERTICAL);
+
+  auto* badge = makeLabel(headerPanel, "Mono / Stereo", true, wxColour(0x61, 0xAF, 0xEF));
+  headerSizer->Add(badge, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 12);
 
   auto* controlsSizer = new wxBoxSizer(wxHORIZONTAL);
   auto* targetPanel = new wxPanel(this, wxID_ANY);
   auto* targetSizer = new wxBoxSizer(wxVERTICAL);
   targetPanel->SetSizer(targetSizer);
-  targetSizer->Add(makeLabel(targetPanel, "Level Targeting", true), 0, wxBOTTOM, 10);
+  targetSizer->Add(makeLabel(targetPanel, "Level Targeting", true), 0, wxBOTTOM, 6);
   addSliderRow(targetPanel, ParamId::targetLevel, "LUFS", 2);
   addSliderRow(targetPanel, ParamId::inputTrim, "dB", 2);
   addProgramModeChoice(targetPanel);
@@ -152,11 +154,11 @@ void GainPilotEditorPanel::buildUi() {
   auto* dynamicsPanel = new wxPanel(this, wxID_ANY);
   auto* dynamicsSizer = new wxBoxSizer(wxVERTICAL);
   dynamicsPanel->SetSizer(dynamicsSizer);
-  dynamicsSizer->Add(makeLabel(dynamicsPanel, "Dynamics & Ceiling", true), 0, wxBOTTOM, 10);
+  dynamicsSizer->Add(makeLabel(dynamicsPanel, "Dynamics & Ceiling", true), 0, wxBOTTOM, 6);
   addSliderRow(dynamicsPanel, ParamId::truePeak, "dB", 2);
   addSliderRow(dynamicsPanel, ParamId::maxGain, "dB", 2);
   auto* relearn = new wxButton(dynamicsPanel, wxID_ANY, "Reset / Relearn");
-  dynamicsSizer->Add(relearn, 0, wxTOP | wxBOTTOM, 8);
+  dynamicsSizer->Add(relearn, 0, wxTOP | wxBOTTOM, 4);
   relearn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
     if (callbacks_.resetIntegrated) {
       callbacks_.resetIntegrated();
@@ -164,16 +166,16 @@ void GainPilotEditorPanel::buildUi() {
   });
   dynamicsSizer->AddStretchSpacer();
   latencyLabel_ = makeLabel(dynamicsPanel, "Latency: 0.00 ms", false, kSubtle);
-  dynamicsSizer->Add(latencyLabel_, 0, wxTOP, 10);
+  dynamicsSizer->Add(latencyLabel_, 0, wxTOP, 6);
 
-  controlsSizer->Add(targetPanel, 1, wxEXPAND | wxRIGHT, 12);
+  controlsSizer->Add(targetPanel, 1, wxEXPAND | wxRIGHT, 8);
   controlsSizer->Add(dynamicsPanel, 1, wxEXPAND);
 
-  contentSizer->Add(headerPanel, 0, wxEXPAND | wxBOTTOM, 12);
+  contentSizer->Add(headerPanel, 0, wxEXPAND | wxBOTTOM, 8);
   contentSizer->Add(controlsSizer, 1, wxEXPAND);
 
-  root->Add(meterPanel, 0, wxEXPAND | wxALL, 14);
-  root->Add(contentSizer, 1, wxEXPAND | wxALL, 14);
+  root->Add(meterPanel, 0, wxEXPAND | wxALL, 8);
+  root->Add(contentSizer, 1, wxEXPAND | wxALL, 8);
 
   SetSizer(root);
 
@@ -214,7 +216,7 @@ void GainPilotEditorPanel::addSliderRow(wxWindow* parent, ParamId id, const char
 
   auto* parentSizer = parent->GetSizer();
   auto* label = makeLabel(parent, wxString::FromUTF8(spec.name.data(), spec.name.size()), false, kSubtle);
-  parentSizer->Add(label, 0, wxBOTTOM, 4);
+  parentSizer->Add(label, 0, wxBOTTOM, 1);
 
   auto* row = new wxBoxSizer(wxHORIZONTAL);
   auto* slider = new wxSlider(parent,
@@ -227,9 +229,9 @@ void GainPilotEditorPanel::addSliderRow(wxWindow* parent, ParamId id, const char
                               wxSL_HORIZONTAL);
   auto* valueLabel = makeLabel(parent, formatValue(id, spec.defaultValue), true, kAccent);
 
-  row->Add(slider, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, 10);
+  row->Add(slider, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
   row->Add(valueLabel, 0, wxALIGN_CENTER_VERTICAL);
-  parentSizer->Add(row, 0, wxEXPAND | wxBOTTOM, 10);
+  parentSizer->Add(row, 0, wxEXPAND | wxBOTTOM, 6);
 
   sliderRows_[paramIndex(id)] = SliderWidgets{slider, valueLabel};
   slider->Bind(wxEVT_SLIDER, [this, id, scale](wxCommandEvent& event) {
@@ -244,13 +246,13 @@ void GainPilotEditorPanel::addSliderRow(wxWindow* parent, ParamId id, const char
 
 void GainPilotEditorPanel::addProgramModeChoice(wxWindow* parent) {
   auto* parentSizer = parent->GetSizer();
-  parentSizer->Add(makeLabel(parent, "Program Mode", false, kSubtle), 0, wxBOTTOM, 4);
+  parentSizer->Add(makeLabel(parent, "Program Mode", false, kSubtle), 0, wxBOTTOM, 1);
   programModeChoice_ = new wxChoice(parent, wxID_ANY);
   for (const auto* label : kProgramModeLabels) {
     programModeChoice_->Append(label);
   }
   programModeChoice_->SetSelection(static_cast<int>(ProgramMode::automatic));
-  parentSizer->Add(programModeChoice_, 0, wxEXPAND | wxBOTTOM, 10);
+  parentSizer->Add(programModeChoice_, 0, wxEXPAND | wxBOTTOM, 6);
   programModeChoice_->Bind(wxEVT_CHOICE, [this](wxCommandEvent& event) {
     values_[paramIndex(ParamId::programMode)] = static_cast<float>(event.GetSelection());
     if (!suppressEvents_ && callbacks_.setParameterValue) {
