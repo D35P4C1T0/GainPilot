@@ -35,6 +35,14 @@ Current scope:
 - LV2 state save/restore
 - VST3 and LV2 artifact packaging from CMake/CPack
 
+<!-- gainpilot-ui-snapshot:start -->
+
+## Plugin UI
+
+![GainPilot plugin UI](docs/assets/gainpilot-ui.png)
+
+<!-- gainpilot-ui-snapshot:end -->
+
 ## Build Requirements
 
 Core requirements:
