@@ -42,6 +42,7 @@ option(GAINPILOT_ENABLE_LV2_UI "Build LV2 GTK UI targets" ${GAINPILOT_ENABLE_LV2
 option(GAINPILOT_ENABLE_TESTS "Build local smoke tests" ON)
 option(GAINPILOT_ENABLE_WX_UI "Build shared wxWidgets UI module" ON)
 option(GAINPILOT_ENABLE_GTK_UI "Build shared GTK UI module" ${GAINPILOT_ENABLE_GTK_UI_DEFAULT})
+option(GAINPILOT_ENABLE_UI_SNAPSHOT "Build the GTK UI snapshot renderer" OFF)
 
 add_library(
   gainpilot_core
@@ -125,6 +126,22 @@ if(GAINPILOT_ENABLE_GTK_UI)
   target_compile_features(gainpilot_gtk_ui PUBLIC cxx_std_20)
   target_compile_options(
     gainpilot_gtk_ui
+    PRIVATE
+      $<$<CXX_COMPILER_ID:MSVC>:/W4 /permissive->
+      $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic>
+  )
+endif()
+
+if(GAINPILOT_ENABLE_UI_SNAPSHOT)
+  if(NOT TARGET gainpilot_gtk_ui)
+    message(FATAL_ERROR "GAINPILOT_ENABLE_UI_SNAPSHOT requires GAINPILOT_ENABLE_GTK_UI.")
+  endif()
+
+  add_executable(gainpilot_ui_snapshot tools/render_gtk_ui.cpp)
+  target_link_libraries(gainpilot_ui_snapshot PRIVATE gainpilot_gtk_ui)
+  target_compile_features(gainpilot_ui_snapshot PRIVATE cxx_std_20)
+  target_compile_options(
+    gainpilot_ui_snapshot
     PRIVATE
       $<$<CXX_COMPILER_ID:MSVC>:/W4 /permissive->
       $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic>
