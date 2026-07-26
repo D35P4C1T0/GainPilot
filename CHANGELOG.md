@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## [0.2.0] - 2026-07-26
+
 - Added automatable Stereo/Mono processing with state migration for existing sessions.
 - Added BS.1770-consistent mono measurement, linked stereo processing, mono downmixing, and click-free mode crossfades.
 - Raised the fresh-instance boost limit to 30 dB and exposed when that limit is reached.
