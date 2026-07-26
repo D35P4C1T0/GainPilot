@@ -100,6 +100,8 @@ constexpr float kAutoFreezeMinLufs = -60.0f;
 constexpr float kAutoFreezeMaxLufs = -35.0f;
 constexpr float kSpeechFastTransientThresholdDb = 3.0f;
 constexpr float kSpeechFastMaxAttenuationDb = 3.0f;
+constexpr float kModeCrossfadeSeconds = 0.020f;
+constexpr float kBaselineSmoothingSeconds = 0.050f;
 
 float dbToLinear(float valueDb) {
   return std::pow(10.0f, valueDb / 20.0f);
@@ -121,8 +123,10 @@ float smoothTowards(float current, float target, float attackCoeff, float releas
 void GainPilotProcessor::prepare(double sampleRate, std::size_t channelCount, std::size_t maxBlockSize) {
   sampleRate_ = sampleRate;
   channelCount_ = channelCount;
-  meter_.prepare(sampleRate_, channelCount_);
-  outputMeter_.prepare(sampleRate_, channelCount_);
+  stereoInputMeter_.prepare(sampleRate_, 2);
+  monoInputMeter_.prepare(sampleRate_, 1);
+  stereoOutputMeter_.prepare(sampleRate_, 2);
+  monoOutputMeter_.prepare(sampleRate_, 1);
   limiter_.prepare(sampleRate_, channelCount_, 0.035375);
   frameInput_.assign(channelCount_, 0.0f);
   frameOutput_.assign(channelCount_, 0.0f);
@@ -132,6 +136,7 @@ void GainPilotProcessor::prepare(double sampleRate, std::size_t channelCount, st
   mediumReleaseCoeff_ = makeCoeff(sampleRate_, 1.200f);
   slowAttackCoeff_ = makeCoeff(sampleRate_, 0.750f);
   slowReleaseCoeff_ = makeCoeff(sampleRate_, 4.000f);
+  baselineSmoothingCoeff_ = makeCoeff(sampleRate_, kBaselineSmoothingSeconds);
   speechMediumAttackCoeff_ = makeCoeff(sampleRate_, 0.180f);
   speechMediumReleaseCoeff_ = makeCoeff(sampleRate_, 1.800f);
   speechSlowAttackCoeff_ = makeCoeff(sampleRate_, 1.100f);
@@ -140,29 +145,36 @@ void GainPilotProcessor::prepare(double sampleRate, std::size_t channelCount, st
   integratedTrimReleaseCoeff_ = makeCoeff(sampleRate_, 10.000f);
   inputLevelAttackCoeff_ = makeCoeff(sampleRate_, 3.000f);
   inputLevelReleaseCoeff_ = makeCoeff(sampleRate_, 12.000f);
+  monoMixStep_ = 1.0f / std::max(1.0f, kModeCrossfadeSeconds * static_cast<float>(sampleRate_));
   autoHoldHops_ = kFreezeHoldHops;
   (void) maxBlockSize;
   reset();
 }
 
 void GainPilotProcessor::reset() {
-  meter_.reset();
-  outputMeter_.reset();
+  stereoInputMeter_.reset();
+  monoInputMeter_.reset();
+  stereoOutputMeter_.reset();
+  monoOutputMeter_.reset();
   limiter_.reset();
   fastGainDb_ = 0.0f;
   mediumGainDb_ = 0.0f;
   slowGainDb_ = 0.0f;
+  baselineGainDb_ = 0.0f;
   integratedTrimGainDb_ = 0.0f;
   currentGainReductionDb_ = 0.0f;
   fastTargetGainDb_ = 0.0f;
   mediumTargetGainDb_ = 0.0f;
   slowTargetGainDb_ = 0.0f;
   integratedTrimTargetGainDb_ = 0.0f;
-  learnedInputLevelLufs_ = parameters_.get(ParamId::inputLevel);
+  currentAppliedGainDb_ = 0.0f;
+  learnedStereoInputLevelLufs_ = parameters_.get(ParamId::inputLevel);
+  learnedMonoInputLevelLufs_ = parameters_.get(ParamId::inputLevel);
   currentMeterValue_ = -70.0f;
   currentLatencySamples_ = static_cast<float>(limiter_.latencySamples());
   resetWasHigh_ = false;
   autoHoldGateOpen_ = false;
+  monoMix_ = monoModeEnabled() ? 1.0f : 0.0f;
   autoHoldHopsRemaining_ = 0;
 }
 
@@ -183,8 +195,8 @@ float GainPilotProcessor::fixedGainDb() const {
 }
 
 float GainPilotProcessor::effectiveInputLevelLufs() const {
-  if (meter_.integratedBlockCount() >= kInputLevelReadyBlocks) {
-    return learnedInputLevelLufs_;
+  if (inputMeter().integratedBlockCount() >= kInputLevelReadyBlocks) {
+    return monoModeEnabled() ? learnedMonoInputLevelLufs_ : learnedStereoInputLevelLufs_;
   }
   return parameters_.get(ParamId::inputLevel);
 }
@@ -195,6 +207,29 @@ float GainPilotProcessor::freezeThresholdLufs() const {
 
 bool GainPilotProcessor::speechModeEnabled() const {
   return static_cast<ProgramMode>(static_cast<int>(parameters_.get(ParamId::programMode))) == ProgramMode::speech;
+}
+
+bool GainPilotProcessor::monoModeEnabled() const {
+  if (channelCount_ == 1) {
+    return true;
+  }
+  return static_cast<ChannelMode>(static_cast<int>(parameters_.get(ParamId::channelMode))) == ChannelMode::mono;
+}
+
+LoudnessMeter& GainPilotProcessor::inputMeter() {
+  return monoModeEnabled() ? monoInputMeter_ : stereoInputMeter_;
+}
+
+const LoudnessMeter& GainPilotProcessor::inputMeter() const {
+  return monoModeEnabled() ? monoInputMeter_ : stereoInputMeter_;
+}
+
+LoudnessMeter& GainPilotProcessor::outputMeter() {
+  return monoModeEnabled() ? monoOutputMeter_ : stereoOutputMeter_;
+}
+
+const LoudnessMeter& GainPilotProcessor::outputMeter() const {
+  return monoModeEnabled() ? monoOutputMeter_ : stereoOutputMeter_;
 }
 
 float GainPilotProcessor::correctionMix(bool useHighBranch) const {
@@ -215,9 +250,12 @@ float GainPilotProcessor::computeDesiredTotalGainDb(float detectorLufs) const {
 void GainPilotProcessor::updateMeterResetLatch() {
   const bool resetHigh = parameters_.get(ParamId::meterReset) >= 0.5f;
   if (resetHigh && !resetWasHigh_) {
-    meter_.resetIntegrated();
-    outputMeter_.resetIntegrated();
-    learnedInputLevelLufs_ = parameters_.get(ParamId::inputLevel);
+    stereoInputMeter_.resetIntegrated();
+    monoInputMeter_.resetIntegrated();
+    stereoOutputMeter_.resetIntegrated();
+    monoOutputMeter_.resetIntegrated();
+    learnedStereoInputLevelLufs_ = parameters_.get(ParamId::inputLevel);
+    learnedMonoInputLevelLufs_ = parameters_.get(ParamId::inputLevel);
     integratedTrimGainDb_ = 0.0f;
     integratedTrimTargetGainDb_ = 0.0f;
     currentMeterValue_ = -70.0f;
@@ -252,6 +290,7 @@ void GainPilotProcessor::process(const ProcessBuffer& buffer) {
   updateMeterResetLatch();
   limiter_.setCeilingDb(parameters_.get(ParamId::truePeak));
   const bool speechMode = speechModeEnabled();
+  const bool monoMode = monoModeEnabled();
   const bool limiterOnly =
       parameters_.get(ParamId::correctionHigh) <= 0.0f && parameters_.get(ParamId::correctionLow) <= 0.0f;
   const float inputTrimLinear = dbToLinear(parameters_.get(ParamId::inputTrim));
@@ -263,20 +302,47 @@ void GainPilotProcessor::process(const ProcessBuffer& buffer) {
   }
 
   for (std::size_t frame = 0; frame < buffer.frames; ++frame) {
+    stereoInputFrame_[0] = buffer.inputs[0][frame] * inputTrimLinear;
+    stereoInputFrame_[1] =
+        channelCount_ >= 2 ? buffer.inputs[1][frame] * inputTrimLinear : 0.0f;
+    monoInputFrame_[0] =
+        channelCount_ >= 2 ? 0.5f * (stereoInputFrame_[0] + stereoInputFrame_[1]) : stereoInputFrame_[0];
+
+    const float targetMonoMix = monoMode ? 1.0f : 0.0f;
+    if (monoMix_ < targetMonoMix) {
+      monoMix_ = std::min(targetMonoMix, monoMix_ + monoMixStep_);
+    } else if (monoMix_ > targetMonoMix) {
+      monoMix_ = std::max(targetMonoMix, monoMix_ - monoMixStep_);
+    }
     for (std::size_t channel = 0; channel < channelCount_; ++channel) {
-      frameInput_[channel] = buffer.inputs[channel][frame] * inputTrimLinear;
+      frameInput_[channel] =
+          stereoInputFrame_[channel] + monoMix_ * (monoInputFrame_[0] - stereoInputFrame_[channel]);
     }
 
-    const float baselineGainDb = std::clamp(fixedGainDb(), kMinGainDb, parameters_.get(ParamId::maxGain));
-    const bool inputControlHop = meter_.processFrame(frameInput_.data());
+    const float baselineTargetGainDb =
+        std::clamp(fixedGainDb(), kMinGainDb, parameters_.get(ParamId::maxGain));
+    baselineGainDb_ = smoothTowards(
+        baselineGainDb_, baselineTargetGainDb, baselineSmoothingCoeff_, baselineSmoothingCoeff_);
+    const float baselineGainDb = baselineGainDb_;
+    const bool stereoInputControlHop = stereoInputMeter_.processFrame(stereoInputFrame_.data());
+    const bool monoInputControlHop = monoInputMeter_.processFrame(monoInputFrame_.data());
+    const bool inputControlHop = monoMode ? monoInputControlHop : stereoInputControlHop;
     if (!limiterOnly && inputControlHop) {
-      if (meter_.integratedBlockCount() >= kInputLevelReadyBlocks) {
-        learnedInputLevelLufs_ = smoothTowards(
-            learnedInputLevelLufs_, meter_.integratedLufs(), inputLevelAttackCoeff_, inputLevelReleaseCoeff_);
+      if (stereoInputMeter_.integratedBlockCount() >= kInputLevelReadyBlocks) {
+        learnedStereoInputLevelLufs_ = smoothTowards(learnedStereoInputLevelLufs_,
+                                                     stereoInputMeter_.integratedLufs(),
+                                                     inputLevelAttackCoeff_,
+                                                     inputLevelReleaseCoeff_);
+      }
+      if (monoInputMeter_.integratedBlockCount() >= kInputLevelReadyBlocks) {
+        learnedMonoInputLevelLufs_ = smoothTowards(learnedMonoInputLevelLufs_,
+                                                   monoInputMeter_.integratedLufs(),
+                                                   inputLevelAttackCoeff_,
+                                                   inputLevelReleaseCoeff_);
       }
 
-      const float inputSlowDetectorLufs = meter_.controlLufs();
-      const float inputFastDetectorLufs = meter_.momentaryLufs();
+      const float inputSlowDetectorLufs = inputMeter().controlLufs();
+      const float inputFastDetectorLufs = inputMeter().momentaryLufs();
       const float inputReferenceLufs = effectiveInputLevelLufs();
       const float highMix = correctionMix(true);
       const float targetLevel = parameters_.get(ParamId::targetLevel);
@@ -298,8 +364,8 @@ void GainPilotProcessor::process(const ProcessBuffer& buffer) {
           std::clamp(slowDesiredTotalGainDb - baselineGainDb, -kSlowMaxAttenuationDb, kSlowMaxGainDb);
       const float mediumResidualGainDb = mediumDesiredTotalGainDb - (baselineGainDb + slowTargetGainDb_);
       mediumTargetGainDb_ = std::clamp(mediumResidualGainDb, -kMediumMaxAttenuationDb, kMediumMaxGainDb);
-      if (outputMeter_.integratedBlockCount() >= kIntegratedTrimReadyBlocks) {
-        const float integratedErrorDb = targetLevel - outputMeter_.integratedLufs();
+      if (outputMeter().integratedBlockCount() >= kIntegratedTrimReadyBlocks) {
+        const float integratedErrorDb = targetLevel - outputMeter().integratedLufs();
         integratedTrimTargetGainDb_ = std::clamp(integratedErrorDb, -kIntegratedTrimMaxDb, kIntegratedTrimMaxDb);
       } else {
         integratedTrimTargetGainDb_ = 0.0f;
@@ -333,19 +399,30 @@ void GainPilotProcessor::process(const ProcessBuffer& buffer) {
     integratedTrimGainDb_ = smoothTowards(
         integratedTrimGainDb_, integratedTrimTargetGainDb_, integratedTrimAttackCoeff_, integratedTrimReleaseCoeff_);
 
-    const float totalGainDb = std::clamp(
+    float totalGainDb = std::clamp(
         baselineGainDb + fastGainDb_ + mediumGainDb_ + slowGainDb_ + integratedTrimGainDb_,
         kMinGainDb,
         parameters_.get(ParamId::maxGain));
+    const bool inputActive =
+        inputMeter().momentaryReady() && inputMeter().momentaryLufs() >= freezeThresholdLufs();
+    if (!inputActive) {
+      totalGainDb = std::min(totalGainDb, 0.0f);
+    }
+    currentAppliedGainDb_ = totalGainDb;
     limiter_.processFrame(frameInput_.data(), frameOutput_.data(), dbToLinear(totalGainDb));
-    (void)outputMeter_.processFrame(frameOutput_.data());
+    stereoOutputFrame_[0] = frameOutput_[0];
+    stereoOutputFrame_[1] = channelCount_ >= 2 ? frameOutput_[1] : 0.0f;
+    monoOutputFrame_[0] =
+        channelCount_ >= 2 ? 0.5f * (stereoOutputFrame_[0] + stereoOutputFrame_[1]) : stereoOutputFrame_[0];
+    (void)stereoOutputMeter_.processFrame(stereoOutputFrame_.data());
+    (void)monoOutputMeter_.processFrame(monoOutputFrame_.data());
 
     for (std::size_t channel = 0; channel < channelCount_; ++channel) {
       buffer.outputs[channel][frame] = frameOutput_[channel];
     }
   }
 
-  currentMeterValue_ = meter_.integratedLufs();
+  currentMeterValue_ = inputMeter().integratedLufs();
   currentGainReductionDb_ =
       std::max(0.0f,
                -(std::min(0.0f, fastGainDb_) + std::min(0.0f, mediumGainDb_) + std::min(0.0f, slowGainDb_) +
@@ -361,23 +438,23 @@ float GainPilotProcessor::currentLatencySamples() const {
 }
 
 float GainPilotProcessor::currentAppliedGainDb() const {
-  return fixedGainDb() + fastGainDb_ + mediumGainDb_ + slowGainDb_ + integratedTrimGainDb_;
+  return currentAppliedGainDb_;
 }
 
 float GainPilotProcessor::currentInputShortTermLufs() const {
-  return meter_.shortTermLufs();
+  return inputMeter().shortTermLufs();
 }
 
 float GainPilotProcessor::currentInputIntegratedLufs() const {
-  return meter_.integratedLufs();
+  return inputMeter().integratedLufs();
 }
 
 float GainPilotProcessor::currentOutputIntegratedLufs() const {
-  return outputMeter_.integratedLufs();
+  return outputMeter().integratedLufs();
 }
 
 float GainPilotProcessor::currentOutputShortTermLufs() const {
-  return outputMeter_.shortTermLufs();
+  return outputMeter().shortTermLufs();
 }
 
 float GainPilotProcessor::currentGainReductionDb() const {

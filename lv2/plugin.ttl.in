@@ -55,7 +55,7 @@
       lv2:index @CONTROL_BASE_PLUS_2@ ;
       lv2:symbol "max_gain" ;
       lv2:name "Max Gain" ;
-      lv2:default 17.0 ;
+      lv2:default 30.0 ;
       lv2:minimum -10.0 ;
       lv2:maximum 30.0 ;
       units:unit units:db
@@ -222,4 +222,26 @@
       lv2:maximum 4096.0 ;
       pp:notOnGUI true ;
       units:unit units:frame
+    ] ,
+    [
+      a lv2:InputPort, lv2:ControlPort, lv2:EnumerationPort ;
+      lv2:index @CONTROL_BASE_PLUS_18@ ;
+      lv2:symbol "channel_mode" ;
+      lv2:name "Channel Mode" ;
+      lv2:default 0.0 ;
+      lv2:minimum 0.0 ;
+      lv2:maximum 1.0 ;
+      lv2:scalePoint [ rdfs:label "Stereo" ; rdf:value 0.0 ] ;
+      lv2:scalePoint [ rdfs:label "Mono" ; rdf:value 1.0 ]
+    ] ,
+    [
+      a lv2:OutputPort, lv2:ControlPort ;
+      lv2:index @CONTROL_BASE_PLUS_19@ ;
+      lv2:symbol "applied_gain_value" ;
+      lv2:name "Applied Gain" ;
+      lv2:default 0.0 ;
+      lv2:minimum -24.0 ;
+      lv2:maximum 30.0 ;
+      pp:notOnGUI true ;
+      units:unit units:db
     ] .

@@ -45,7 +45,9 @@ enum PortIndex : std::uint32_t {
   kOutputIntegratedValue = 18,
   kOutputShortTermValue = 19,
   kGainReductionValue = 20,
-  kLatency = 21
+  kLatency = 21,
+  kChannelMode = 22,
+  kAppliedGainValue = 23
 };
 
 constexpr std::uint32_t kNumAudioPorts = GAINPILOT_LV2_CHANNELS * 2;
@@ -136,6 +138,7 @@ public:
     parameters_.set(ParamId::outputIntegratedValue, -70.0f);
     parameters_.set(ParamId::outputShortTermValue, -70.0f);
     parameters_.set(ParamId::gainReductionValue, 0.0f);
+    parameters_.set(ParamId::appliedGainValue, 0.0f);
     processor_.setParameters(parameters_);
     return LV2_STATE_SUCCESS;
   }
@@ -146,6 +149,9 @@ public:
         continue;
       }
       parameters_.set(inputControlMap[index], *controlPorts_[index]);
+    }
+    if (controlPorts_[kControlChannelMode] != nullptr) {
+      parameters_.set(ParamId::channelMode, *controlPorts_[kControlChannelMode]);
     }
 
     processor_.setParameters(parameters_);
@@ -177,6 +183,9 @@ public:
     if (controlPorts_[kControlLatency] != nullptr) {
       *controlPorts_[kControlLatency] = processor_.currentLatencySamples();
     }
+    if (controlPorts_[kControlAppliedGainValue] != nullptr) {
+      *controlPorts_[kControlAppliedGainValue] = processor_.currentAppliedGainDb();
+    }
   }
 
 private:
@@ -186,6 +195,8 @@ private:
   static constexpr std::size_t kControlOutputShortTermValue = 15;
   static constexpr std::size_t kControlGainReductionValue = 16;
   static constexpr std::size_t kControlLatency = 17;
+  static constexpr std::size_t kControlChannelMode = 18;
+  static constexpr std::size_t kControlAppliedGainValue = 19;
   static constexpr std::array inputControlMap{
       ParamId::targetLevel,
       ParamId::truePeak,
@@ -212,12 +223,16 @@ private:
         snapshot.set(inputControlMap[index], *controlPorts_[index]);
       }
     }
+    if (controlPorts_[kControlChannelMode] != nullptr) {
+      snapshot.set(ParamId::channelMode, *controlPorts_[kControlChannelMode]);
+    }
     snapshot.set(ParamId::meterReset, 0.0f);
     snapshot.set(ParamId::meterValue, -70.0f);
     snapshot.set(ParamId::inputIntegratedValue, -70.0f);
     snapshot.set(ParamId::outputIntegratedValue, -70.0f);
     snapshot.set(ParamId::outputShortTermValue, -70.0f);
     snapshot.set(ParamId::gainReductionValue, 0.0f);
+    snapshot.set(ParamId::appliedGainValue, 0.0f);
     return snapshot;
   }
 
@@ -249,7 +264,7 @@ private:
   std::vector<float*> audioOutputs_{};
   mutable LV2_URID_Map* map_{nullptr};
   mutable Uris uris_{};
-  std::array<float*, 18> controlPorts_{};
+  std::array<float*, 20> controlPorts_{};
 };
 
 LV2_State_Status saveState(LV2_Handle instance,

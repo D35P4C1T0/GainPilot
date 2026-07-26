@@ -43,12 +43,25 @@ constexpr const Steinberg::Vst::TChar* outputBusName() {
 }
 
 std::vector<std::byte> readStateBytes(Steinberg::IBStream* stream) {
-  std::vector<std::byte> bytes(sizeof(std::uint32_t) * 2 + 4 + sizeof(float) * kStateParamIds.size());
+  constexpr std::size_t kHeaderSize = 4 + sizeof(std::uint32_t) * 2;
+  std::vector<std::byte> bytes(kHeaderSize);
   Steinberg::int32 bytesRead = 0;
-  if (stream->read(bytes.data(), static_cast<Steinberg::int32>(bytes.size()), &bytesRead) != Steinberg::kResultTrue) {
+  if (stream->read(bytes.data(), static_cast<Steinberg::int32>(kHeaderSize), &bytesRead) != Steinberg::kResultTrue ||
+      bytesRead != static_cast<Steinberg::int32>(kHeaderSize)) {
     return {};
   }
-  if (bytesRead != static_cast<Steinberg::int32>(bytes.size())) {
+
+  std::uint32_t count = 0;
+  std::memcpy(&count, bytes.data() + 4 + sizeof(std::uint32_t), sizeof(count));
+  if (count > 64) {
+    return {};
+  }
+  const auto payloadSize = static_cast<std::size_t>(count) * sizeof(float);
+  bytes.resize(kHeaderSize + payloadSize);
+  if (payloadSize > 0 &&
+      (stream->read(bytes.data() + kHeaderSize, static_cast<Steinberg::int32>(payloadSize), &bytesRead) !=
+           Steinberg::kResultTrue ||
+       bytesRead != static_cast<Steinberg::int32>(payloadSize))) {
     return {};
   }
   return bytes;
@@ -203,6 +216,7 @@ void GainPilotPlugin<ChannelCount>::pushMeterOutput(Steinberg::Vst::IParameterCh
   pushOutputParameter(changes, ParamId::outputIntegratedValue, processor_.currentOutputIntegratedLufs(), 2);
   pushOutputParameter(changes, ParamId::outputShortTermValue, processor_.currentOutputShortTermLufs(), 3);
   pushOutputParameter(changes, ParamId::gainReductionValue, processor_.currentGainReductionDb(), 4);
+  pushOutputParameter(changes, ParamId::appliedGainValue, processor_.currentAppliedGainDb(), 5);
 }
 
 template <std::size_t ChannelCount>
@@ -330,6 +344,7 @@ Steinberg::tresult PLUGIN_API GainPilotPlugin<ChannelCount>::setState(Steinberg:
   parameterState_.set(ParamId::outputIntegratedValue, -70.0f);
   parameterState_.set(ParamId::outputShortTermValue, -70.0f);
   parameterState_.set(ParamId::gainReductionValue, 0.0f);
+  parameterState_.set(ParamId::appliedGainValue, 0.0f);
   processor_.setParameters(parameterState_);
   lastProjectTimeSamples_.reset();
   return Steinberg::kResultOk;

@@ -1,4 +1,5 @@
 #include <cstdlib>
+#include <cmath>
 #include <filesystem>
 #include <iostream>
 
@@ -12,7 +13,7 @@
 namespace {
 
 constexpr int kWidth = 760;
-constexpr int kHeight = 360;
+constexpr int kHeight = 620;
 
 void drainGtkEvents() {
   for (int i = 0; i < 8; ++i) {
@@ -31,11 +32,17 @@ void setDemoState(gainpilot::ui::GainPilotGtkEditor& editor) {
   editor.setParameterValue(ParamId::truePeak, -1.0f);
   editor.setParameterValue(ParamId::maxGain, 12.0f);
   editor.setParameterValue(ParamId::programMode, static_cast<float>(gainpilot::ProgramMode::speech));
+  editor.setParameterValue(ParamId::channelMode, static_cast<float>(gainpilot::ChannelMode::stereo));
   editor.setParameterValue(ParamId::meterValue, -18.42f);
   editor.setParameterValue(ParamId::inputIntegratedValue, -21.87f);
   editor.setParameterValue(ParamId::outputIntegratedValue, -16.05f);
   editor.setParameterValue(ParamId::outputShortTermValue, -15.72f);
   editor.setParameterValue(ParamId::gainReductionValue, 4.8f);
+  for (int step = 0; step < 80; ++step) {
+    const float gain = -2.0f + static_cast<float>(step) * 0.075f +
+                       1.3f * std::sin(static_cast<float>(step) * 0.22f);
+    editor.setParameterValue(ParamId::appliedGainValue, gain);
+  }
   editor.setLatencyMilliseconds(12.5f);
 }
 

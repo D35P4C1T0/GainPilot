@@ -17,18 +17,20 @@ namespace gainpilot::vst3 {
 
 namespace {
 
-const Steinberg::ViewRect kDefaultViewRect{0, 0, 800, 470};
-constexpr std::array<ParamId, 10> kUiParameters{
+const Steinberg::ViewRect kDefaultViewRect{0, 0, 800, 620};
+constexpr std::array<ParamId, 12> kUiParameters{
     ParamId::targetLevel,
     ParamId::truePeak,
     ParamId::maxGain,
     ParamId::inputTrim,
     ParamId::programMode,
+    ParamId::channelMode,
     ParamId::meterValue,
     ParamId::inputIntegratedValue,
     ParamId::outputIntegratedValue,
     ParamId::outputShortTermValue,
     ParamId::gainReductionValue,
+    ParamId::appliedGainValue,
 };
 
 class GtkHostTimerHandler final : public Steinberg::FObject, public Steinberg::Linux::ITimerHandler {

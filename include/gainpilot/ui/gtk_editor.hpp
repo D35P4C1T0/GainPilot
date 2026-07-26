@@ -2,6 +2,7 @@
 
 #include <array>
 #include <functional>
+#include <vector>
 
 #include <gtk/gtk.h>
 
@@ -34,10 +35,12 @@ private:
   void build(const char* badgeText);
   void buildMeterPanel(GtkWidget* panel);
   void buildHeader(GtkWidget* parent, const char* badgeText);
+  void buildGainGraphPanel(GtkWidget* parent);
   void buildTargetPanel(GtkWidget* parent);
   void buildDynamicsPanel(GtkWidget* parent);
   void addSlider(GtkWidget* parent, ParamId param);
   void addProgramModeChoice(GtkWidget* parent);
+  void addChannelModeChoice(GtkWidget* parent);
   void updateSlider(ParamId id, float value);
   void updateChoice(ParamId id, int value);
   void updateMeter(float value);
@@ -46,6 +49,7 @@ private:
   static void onSliderChanged(GtkRange* range, gpointer userData);
   static void onComboChanged(GtkComboBox* comboBox, gpointer userData);
   static void onResetClicked(GtkButton*, gpointer userData);
+  static gboolean onGraphDraw(GtkWidget* widget, cairo_t* context, gpointer userData);
   static std::size_t paramIndex(ParamId id);
   static std::size_t sliderIndex(ParamId id);
   static const char* formatValue(ParamId id, float value, char* buffer, std::size_t size);
@@ -58,11 +62,15 @@ private:
   GtkWidget* outputIntegratedLabel_{nullptr};
   GtkWidget* outputShortTermLabel_{nullptr};
   GtkWidget* gainReductionLabel_{nullptr};
+  GtkWidget* appliedGainLabel_{nullptr};
   GtkWidget* latencyLabel_{nullptr};
+  GtkWidget* gainGraph_{nullptr};
   GtkComboBox* programModeCombo_{nullptr};
+  GtkComboBox* channelModeCombo_{nullptr};
   bool suppressEvents_{false};
   std::array<float, kNumParameters> values_{};
   std::array<SliderBinding, 4> sliders_{};
+  std::vector<float> gainHistory_{};
 };
 
 bool ensureGtkUiRuntime();

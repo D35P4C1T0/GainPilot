@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+- Added automatable Stereo/Mono processing with state migration for existing sessions.
+- Added BS.1770-consistent mono measurement, linked stereo processing, mono downmixing, and click-free mode crossfades.
+- Raised the fresh-instance boost limit to 30 dB and exposed when that limit is reached.
+- Redesigned the Cocoa, wxWidgets, and GTK editors around a target fader and live applied-gain graph.
+- Expanded deterministic loudness, channel-layout, silence, mode-switching, and render-consistency tests.
+
 ## [0.1.1] - 2026-03-17
 
 - Reworked the loudness control path to behave more like LUveler/TriLeveler on real program material.

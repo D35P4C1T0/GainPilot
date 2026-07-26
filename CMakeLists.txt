@@ -133,12 +133,30 @@ if(GAINPILOT_ENABLE_GTK_UI)
 endif()
 
 if(GAINPILOT_ENABLE_UI_SNAPSHOT)
-  if(NOT TARGET gainpilot_gtk_ui)
-    message(FATAL_ERROR "GAINPILOT_ENABLE_UI_SNAPSHOT requires GAINPILOT_ENABLE_GTK_UI.")
+  if(APPLE)
+    find_library(GAINPILOT_SNAPSHOT_COCOA_FRAMEWORK Cocoa REQUIRED)
+    add_executable(gainpilot_ui_snapshot tools/render_mac_ui.mm src/vst3/mac_view.mm)
+    target_link_libraries(
+      gainpilot_ui_snapshot
+      PRIVATE
+        gainpilot_core
+        sdk
+        ${GAINPILOT_SNAPSHOT_COCOA_FRAMEWORK}
+    )
+    target_include_directories(
+      gainpilot_ui_snapshot
+      PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_BINARY_DIR}/generated
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/vst3
+    )
+  else()
+    if(NOT TARGET gainpilot_gtk_ui)
+      message(FATAL_ERROR "GAINPILOT_ENABLE_UI_SNAPSHOT requires GAINPILOT_ENABLE_GTK_UI.")
+    endif()
+    add_executable(gainpilot_ui_snapshot tools/render_gtk_ui.cpp)
+    target_link_libraries(gainpilot_ui_snapshot PRIVATE gainpilot_gtk_ui)
   endif()
-
-  add_executable(gainpilot_ui_snapshot tools/render_gtk_ui.cpp)
-  target_link_libraries(gainpilot_ui_snapshot PRIVATE gainpilot_gtk_ui)
   target_compile_features(gainpilot_ui_snapshot PRIVATE cxx_std_20)
   target_compile_options(
     gainpilot_ui_snapshot
@@ -235,6 +253,8 @@ if(GAINPILOT_ENABLE_LV2)
     math(EXPR CONTROL_BASE_PLUS_15 "${CONTROL_BASE} + 15")
     math(EXPR CONTROL_BASE_PLUS_16 "${CONTROL_BASE} + 16")
     math(EXPR CONTROL_BASE_PLUS_17 "${CONTROL_BASE} + 17")
+    math(EXPR CONTROL_BASE_PLUS_18 "${CONTROL_BASE} + 18")
+    math(EXPR CONTROL_BASE_PLUS_19 "${CONTROL_BASE} + 19")
 
     if(GAINPILOT_ENABLE_LV2_UI)
       add_library(${target_name}_ui MODULE src/lv2/ui.cpp)
@@ -320,6 +340,9 @@ if(EXISTS "${GAINPILOT_VST3_SDK_PATH}/CMakeLists.txt")
   if(APPLE)
     list(APPEND gainpilot_vst3_sources src/vst3/mac_view.mm)
   endif()
+  if(UNIX AND NOT APPLE AND TARGET gainpilot_gtk_ui)
+    list(APPEND gainpilot_vst3_sources src/vst3/gtk_view.cpp)
+  endif()
   if(WIN32)
     list(APPEND gainpilot_vst3_sources ${GAINPILOT_VST3_SDK_PATH}/public.sdk/source/main/dllmain.cpp)
   elseif(APPLE)
@@ -337,6 +360,10 @@ if(EXISTS "${GAINPILOT_VST3_SDK_PATH}/CMakeLists.txt")
   if(APPLE)
     find_library(COCOA_FRAMEWORK Cocoa REQUIRED)
     target_link_libraries(gainpilot_vst3 PRIVATE ${COCOA_FRAMEWORK})
+  endif()
+  if(UNIX AND NOT APPLE AND TARGET gainpilot_gtk_ui)
+    target_link_libraries(gainpilot_vst3 PRIVATE gainpilot_gtk_ui)
+    target_compile_definitions(gainpilot_vst3 PRIVATE GAINPILOT_VST3_USE_GTK_VIEW=1)
   endif()
   target_include_directories(
     gainpilot_vst3
