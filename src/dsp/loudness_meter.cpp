@@ -29,7 +29,7 @@ void configureChannelMap(::ebur128_state* state, std::size_t channelCount) {
   }
 
   if (channelCount >= 1) {
-    ebur128_set_channel(state, 0, channelCount == 1 ? EBUR128_DUAL_MONO : EBUR128_LEFT);
+    ebur128_set_channel(state, 0, channelCount == 1 ? EBUR128_CENTER : EBUR128_LEFT);
   }
   if (channelCount >= 2) {
     ebur128_set_channel(state, 1, EBUR128_RIGHT);

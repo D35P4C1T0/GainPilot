@@ -33,6 +33,8 @@ constexpr std::uint32_t kOutputIntegratedValue = kControlBase + 14;
 constexpr std::uint32_t kOutputShortTermValue = kControlBase + 15;
 constexpr std::uint32_t kGainReductionValue = kControlBase + 16;
 constexpr std::uint32_t kLatency = kControlBase + 17;
+constexpr std::uint32_t kChannelMode = kControlBase + 18;
+constexpr std::uint32_t kAppliedGainValue = kControlBase + 19;
 
 std::uint32_t portForParam(ParamId id) {
   switch (id) {
@@ -46,6 +48,8 @@ std::uint32_t portForParam(ParamId id) {
       return kInputTrim;
     case ParamId::programMode:
       return kProgramMode;
+    case ParamId::channelMode:
+      return kChannelMode;
     case ParamId::freezeLevel:
       return kFreezeLevel;
     case ParamId::inputLevel:
@@ -61,6 +65,11 @@ std::uint32_t portForParam(ParamId id) {
     case ParamId::meterReset:
       return kMeterReset;
     case ParamId::meterValue:
+    case ParamId::inputIntegratedValue:
+    case ParamId::outputIntegratedValue:
+    case ParamId::outputShortTermValue:
+    case ParamId::gainReductionValue:
+    case ParamId::appliedGainValue:
     case ParamId::count:
       break;
   }
@@ -83,6 +92,9 @@ bool paramForPort(std::uint32_t port, ParamId& id) {
       return true;
     case kProgramMode:
       id = ParamId::programMode;
+      return true;
+    case kChannelMode:
+      id = ParamId::channelMode;
       return true;
     case kFreezeLevel:
       id = ParamId::freezeLevel;
@@ -119,6 +131,9 @@ bool paramForPort(std::uint32_t port, ParamId& id) {
       return true;
     case kGainReductionValue:
       id = ParamId::gainReductionValue;
+      return true;
+    case kAppliedGainValue:
+      id = ParamId::appliedGainValue;
       return true;
     default:
       return false;

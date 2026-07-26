@@ -142,6 +142,11 @@ const std::array<const char*, 2> kProgramModeLabels{
     "Speech",
 };
 
+const std::array<const char*, 2> kChannelModeLabels{
+    "Stereo",
+    "Mono",
+};
+
 Steinberg::Vst::Parameter* makeParameter(ParamId id) {
   using Steinberg::Vst::Parameter;
   using Steinberg::Vst::ParameterInfo;
@@ -153,11 +158,13 @@ Steinberg::Vst::Parameter* makeParameter(ParamId id) {
     case ParamId::truePeak:
       return new DbParameter(STR16("True Peak"), toVstParamId(id), -10.0, 0.0, -1.0);
     case ParamId::maxGain:
-      return new DbParameter(STR16("Max Gain"), toVstParamId(id), -10.0, 30.0, 17.0);
+      return new DbParameter(STR16("Max Gain"), toVstParamId(id), -10.0, 30.0, 30.0);
     case ParamId::inputTrim:
       return new DbParameter(STR16("Input Trim"), toVstParamId(id), -12.0, 12.0, 0.0);
     case ParamId::programMode:
       return makeEnumParameter(STR16("Program Mode"), toVstParamId(id), kProgramModeLabels, 0);
+    case ParamId::channelMode:
+      return makeEnumParameter(STR16("Channel Mode"), toVstParamId(id), kChannelModeLabels, 0);
     case ParamId::freezeLevel: {
       return hideParameter(new LufsParameter(STR16("Freeze Level"), toVstParamId(id), -70.0, -10.0, -50.0));
     }
@@ -243,6 +250,19 @@ Steinberg::Vst::Parameter* makeParameter(ParamId id) {
           STR16("dB"),
           0.0,
           24.0,
+          0.0,
+          0,
+          ParameterInfo::kIsReadOnly);
+      parameter->setPrecision(2);
+      return parameter;
+    }
+    case ParamId::appliedGainValue: {
+      auto* parameter = new RangeParameter(
+          STR16("Applied Gain"),
+          toVstParamId(id),
+          STR16("dB"),
+          -24.0,
+          30.0,
           0.0,
           0,
           ParameterInfo::kIsReadOnly);

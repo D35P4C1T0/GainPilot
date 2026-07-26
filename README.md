@@ -14,7 +14,7 @@ Current scope:
 
 - Native `VST3`
   - Windows: custom wxWidgets editor
-  - Linux: generic host UI fallback
+  - Linux: custom GTK3 editor when GTK support is enabled
   - macOS: native Cocoa editor
 - Native `LV2`
   - Linux: custom GTK3 UI
@@ -28,8 +28,10 @@ Current scope:
 ## Features
 
 - Simplified main controls: `Target Level`, `True Peak`, `Max Gain`
+- User-selectable `Stereo` / `Mono` processing, with linked stereo gain and a defined `0.5 * (L + R)` mono downmix
 - Target-based loudness auto-leveling with learned input loudness
 - Input loudness meter with `Integrated` readout in the editor
+- Live applied-gain history and current-gain readout
 - True-peak ceiling control
 - Mono and stereo builds with shared behavior
 - LV2 state save/restore
@@ -152,8 +154,8 @@ raw build folders.
 
 ## Known Notes
 
-- The Linux `VST3` build currently relies on the host's generic UI instead of a
-  custom editor.
+- The Linux `VST3` build falls back to the host's generic UI when GTK support
+  is disabled.
 - The Steinberg VST3 SDK is not redistributed with this repository.
 - `reference/` is ignored and is not part of the public source tree.
 

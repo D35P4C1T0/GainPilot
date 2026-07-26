@@ -52,7 +52,7 @@ private:
   gainpilot::ParameterState parameterState_{};
   gainpilot::dsp::GainPilotProcessor processor_{};
   Steinberg::uint32 latencySamples_{0};
-  std::array<Steinberg::Vst::ParamValue, 5> lastRuntimeOutputNormalized_{};
+  std::array<Steinberg::Vst::ParamValue, 6> lastRuntimeOutputNormalized_{};
   std::optional<Steinberg::int64> lastProjectTimeSamples_{};
   std::array<std::vector<float>, ChannelCount> tempInputs_{};
   std::array<std::vector<float>, ChannelCount> tempOutputs_{};

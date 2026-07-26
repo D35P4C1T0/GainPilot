@@ -24,12 +24,14 @@ inline constexpr std::array kExportedVstParamIds{
     ParamId::maxGain,
     ParamId::inputTrim,
     ParamId::programMode,
+    ParamId::channelMode,
     ParamId::meterReset,
     ParamId::meterValue,
     ParamId::inputIntegratedValue,
     ParamId::outputIntegratedValue,
     ParamId::outputShortTermValue,
     ParamId::gainReductionValue,
+    ParamId::appliedGainValue,
 };
 
 Steinberg::Vst::Parameter* makeParameter(ParamId id);
@@ -40,7 +42,8 @@ Steinberg::Vst::Parameter* makeParameter(ParamId id);
 
 [[nodiscard]] constexpr bool isRuntimeOutputParam(ParamId id) {
   return id == ParamId::meterValue || id == ParamId::inputIntegratedValue || id == ParamId::outputIntegratedValue ||
-         id == ParamId::outputShortTermValue || id == ParamId::gainReductionValue;
+         id == ParamId::outputShortTermValue || id == ParamId::gainReductionValue ||
+         id == ParamId::appliedGainValue;
 }
 
 [[nodiscard]] constexpr bool isAutomatableStateParam(ParamId id) {

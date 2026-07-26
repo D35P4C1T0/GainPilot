@@ -16,6 +16,8 @@ class wxWindow;
 
 namespace gainpilot::ui {
 
+class GainHistoryPanel;
+
 struct EditorCallbacks {
   std::function<void(ParamId, float)> setParameterValue;
   std::function<void()> resetIntegrated;
@@ -37,8 +39,10 @@ private:
 
   void buildUi();
   void applyTheme();
+  void addTargetControl(wxWindow* parent);
   void addSliderRow(wxWindow* parent, ParamId id, const char* unit, int precision, int scale = 100);
   void addProgramModeChoice(wxWindow* parent);
+  void addChannelModeChoice(wxWindow* parent);
   void updateSliderRow(ParamId id, float value);
   void updateChoice(ParamId id, int value);
   void updateMeter(float value);
@@ -55,13 +59,16 @@ private:
   std::array<SliderWidgets, kNumParameters> sliderRows_{};
   std::array<int, kNumParameters> sliderScales_{};
   wxChoice* programModeChoice_{nullptr};
+  wxChoice* channelModeChoice_{nullptr};
   wxGauge* meterGauge_{nullptr};
   wxStaticText* meterValueLabel_{nullptr};
   wxStaticText* inputIntegratedLabel_{nullptr};
   wxStaticText* outputIntegratedLabel_{nullptr};
   wxStaticText* outputShortTermLabel_{nullptr};
   wxStaticText* gainReductionLabel_{nullptr};
+  wxStaticText* appliedGainLabel_{nullptr};
   wxStaticText* latencyLabel_{nullptr};
+  GainHistoryPanel* gainGraph_{nullptr};
   bool suppressEvents_{false};
 };
 

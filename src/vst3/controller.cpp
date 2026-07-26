@@ -1,5 +1,7 @@
 #include "controller.hpp"
 
+#include <cstring>
+
 #include "pluginterfaces/base/ibstream.h"
 #include "pluginterfaces/base/fstrdefs.h"
 #include "pluginterfaces/gui/iplugview.h"
@@ -15,11 +17,40 @@
 #include "wx_view.hpp"
 #endif
 
+#if GAINPILOT_VST3_USE_GTK_VIEW
+#include "gtk_view.hpp"
+#endif
+
 namespace gainpilot::vst3 {
 
 namespace {
 
 constexpr float kLatencyMilliseconds = 35.375f;
+
+std::vector<std::byte> readStateBytes(Steinberg::IBStream* stream) {
+  constexpr std::size_t kHeaderSize = 4 + sizeof(std::uint32_t) * 2;
+  std::vector<std::byte> bytes(kHeaderSize);
+  Steinberg::int32 bytesRead = 0;
+  if (stream->read(bytes.data(), static_cast<Steinberg::int32>(kHeaderSize), &bytesRead) != Steinberg::kResultTrue ||
+      bytesRead != static_cast<Steinberg::int32>(kHeaderSize)) {
+    return {};
+  }
+
+  std::uint32_t count = 0;
+  std::memcpy(&count, bytes.data() + 4 + sizeof(std::uint32_t), sizeof(count));
+  if (count > 64) {
+    return {};
+  }
+  const auto payloadSize = static_cast<std::size_t>(count) * sizeof(float);
+  bytes.resize(kHeaderSize + payloadSize);
+  if (payloadSize > 0 &&
+      (stream->read(bytes.data() + kHeaderSize, static_cast<Steinberg::int32>(payloadSize), &bytesRead) !=
+           Steinberg::kResultTrue ||
+       bytesRead != static_cast<Steinberg::int32>(payloadSize))) {
+    return {};
+  }
+  return bytes;
+}
 
 float plainParameterValue(GainPilotController& controller, ParamId id) {
   return normalizedToPlain(id, static_cast<float>(controller.getParamNormalized(toVstParamId(id))));
@@ -73,10 +104,8 @@ Steinberg::tresult PLUGIN_API GainPilotController::setComponentState(Steinberg::
     return Steinberg::kResultFalse;
   }
 
-  std::vector<std::byte> bytes(sizeof(std::uint32_t) * 2 + 4 + sizeof(float) * gainpilot::kStateParamIds.size());
-  Steinberg::int32 bytesRead = 0;
-  if (state->read(bytes.data(), static_cast<Steinberg::int32>(bytes.size()), &bytesRead) != Steinberg::kResultTrue ||
-      bytesRead != static_cast<Steinberg::int32>(bytes.size())) {
+  const auto bytes = readStateBytes(state);
+  if (bytes.empty()) {
     return Steinberg::kResultFalse;
   }
 
@@ -159,6 +188,29 @@ Steinberg::IPlugView* PLUGIN_API GainPilotController::createView(Steinberg::FIDS
             triggerIntegratedReset(*this);
           },
   }));
+#elif GAINPILOT_VST3_USE_GTK_VIEW
+  return static_cast<Steinberg::IPlugView*>(new GainPilotGtkView({
+      .getParameterValue =
+          [this](ParamId id) {
+            return plainParameterValue(*this, id);
+          },
+      .getMeterValue =
+          [this]() {
+            return meterValue(*this);
+          },
+      .getLatencyMilliseconds =
+          []() {
+            return kLatencyMilliseconds;
+          },
+      .setParameterValue =
+          [this](ParamId id, float value) {
+            performPlainParameterEdit(*this, id, value);
+          },
+      .resetIntegrated =
+          [this]() {
+            triggerIntegratedReset(*this);
+          },
+  }));
 #else
   return nullptr;
 #endif
@@ -185,6 +237,7 @@ gainpilot::ParameterState GainPilotController::snapshotState() {
   state.set(ParamId::outputIntegratedValue, -70.0f);
   state.set(ParamId::outputShortTermValue, -70.0f);
   state.set(ParamId::gainReductionValue, 0.0f);
+  state.set(ParamId::appliedGainValue, 0.0f);
   return state;
 }
 

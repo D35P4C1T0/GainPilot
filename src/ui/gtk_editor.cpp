@@ -36,47 +36,52 @@ void ensureGtkCss() {
     auto* provider = gtk_css_provider_new();
     const char* css = R"css(
       .gainpilot-root {
-        background: #282c34;
-        color: #abb2bf;
+        background: #0b0d0e;
+        color: #c7ccce;
         padding: 8px;
       }
       .gainpilot-panel {
-        background: #21252b;
-        border: 1px solid #3e4451;
+        background: #131516;
+        border: 1px solid #25292a;
         border-radius: 12px;
         padding: 8px;
       }
       .gainpilot-title {
         font-weight: 700;
         font-size: 18px;
-        color: #e5c07b;
+        color: #2ee6d6;
       }
       .gainpilot-subtitle {
         font-size: 11px;
-        color: #5c6370;
+        color: #7a8082;
       }
       .gainpilot-section {
         font-weight: 700;
         font-size: 12px;
-        color: #abb2bf;
+        color: #c7ccce;
       }
       .gainpilot-readout {
         font-weight: 700;
         font-size: 12px;
-        color: #d19a66;
-        background: #2c313c;
-        border: 1px solid #4b5263;
+        color: #2ee6d6;
+        background: #0c0e0f;
+        border: 1px solid #2a3333;
         border-radius: 8px;
         padding: 3px 7px;
       }
       .gainpilot-badge {
         font-weight: 700;
         font-size: 12px;
-        color: #61afef;
-        background: #2c313c;
-        border: 1px solid #4b5263;
+        color: #2ee6d6;
+        background: #0c0e0f;
+        border: 1px solid #2a3333;
         border-radius: 999px;
         padding: 3px 8px;
+      }
+      .gainpilot-graph {
+        background: #0b0d0e;
+        border: 1px solid #25292a;
+        border-radius: 8px;
       }
     )css";
     gtk_css_provider_load_from_data(provider, css, -1, nullptr);
@@ -95,6 +100,10 @@ bool gGtkInitOk = false;
 constexpr std::array<const char*, 2> kProgramModeLabels{
     "Auto",
     "Speech",
+};
+constexpr std::array<const char*, 2> kChannelModeLabels{
+    "Stereo",
+    "Mono",
 };
 constexpr std::array<const char*, 4> kCorrMixModeLabels{
     "Linear / Linear",
@@ -149,7 +158,7 @@ void GainPilotGtkEditor::setParameterValue(ParamId id, float value) {
     return;
   }
 
-  if (id == ParamId::programMode) {
+  if (id == ParamId::programMode || id == ParamId::channelMode) {
     updateChoice(id, static_cast<int>(std::lround(value)));
     return;
   }
@@ -172,6 +181,18 @@ void GainPilotGtkEditor::setParameterValue(ParamId id, float value) {
   if (id == ParamId::gainReductionValue) {
     updateMeter(value);
     updateReadout(gainReductionLabel_, id, value);
+    return;
+  }
+
+  if (id == ParamId::appliedGainValue) {
+    updateReadout(appliedGainLabel_, id, value);
+    gainHistory_.push_back(std::clamp(value, -12.0f, 12.0f));
+    if (gainHistory_.size() > 180) {
+      gainHistory_.erase(gainHistory_.begin());
+    }
+    if (gainGraph_ != nullptr) {
+      gtk_widget_queue_draw(gainGraph_);
+    }
   }
 }
 
@@ -214,6 +235,7 @@ void GainPilotGtkEditor::build(const char* badgeText) {
 
   buildMeterPanel(meterPanel);
   buildHeader(contentColumn, badgeText);
+  buildGainGraphPanel(contentColumn);
 
   auto* controlsRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
   gtk_widget_set_hexpand(controlsRow, TRUE);
@@ -263,7 +285,7 @@ void GainPilotGtkEditor::buildHeader(GtkWidget* parent, const char* badgeText) {
   auto* heading = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
   gtk_box_pack_start(GTK_BOX(heading), createLabel("GainPilot", "gainpilot-title"), FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(heading),
-                     createLabel("Trim, speech mode, and live loudness feedback", "gainpilot-subtitle"),
+                     createLabel("Adaptive LUFS leveling - linked true-peak protection", "gainpilot-subtitle"),
                      FALSE,
                      FALSE,
                      0);
@@ -271,6 +293,27 @@ void GainPilotGtkEditor::buildHeader(GtkWidget* parent, const char* badgeText) {
 
   auto* badge = createLabel(badgeText, "gainpilot-badge", 0.5f);
   gtk_box_pack_end(GTK_BOX(row), badge, FALSE, FALSE, 0);
+}
+
+void GainPilotGtkEditor::buildGainGraphPanel(GtkWidget* parent) {
+  auto* panel = createPanel();
+  gtk_widget_set_hexpand(panel, TRUE);
+  gtk_widget_set_vexpand(panel, TRUE);
+  gtk_box_pack_start(GTK_BOX(parent), panel, TRUE, TRUE, 0);
+
+  auto* box = createPanelBox(panel, GTK_ORIENTATION_VERTICAL, 6);
+  gtk_box_pack_start(GTK_BOX(box), createLabel("LEVELING RESPONSE", "gainpilot-section"), FALSE, FALSE, 0);
+
+  gainGraph_ = gtk_drawing_area_new();
+  gtk_widget_set_size_request(gainGraph_, 420, 180);
+  gtk_widget_set_hexpand(gainGraph_, TRUE);
+  gtk_widget_set_vexpand(gainGraph_, TRUE);
+  gtk_style_context_add_class(gtk_widget_get_style_context(gainGraph_), "gainpilot-graph");
+  g_signal_connect(gainGraph_, "draw", G_CALLBACK(onGraphDraw), this);
+  gtk_box_pack_start(GTK_BOX(box), gainGraph_, TRUE, TRUE, 0);
+
+  appliedGainLabel_ = createLabel("Current Gain: +0.00 dB", "gainpilot-readout", 0.5f);
+  gtk_box_pack_start(GTK_BOX(box), appliedGainLabel_, FALSE, FALSE, 0);
 }
 
 void GainPilotGtkEditor::buildTargetPanel(GtkWidget* parent) {
@@ -284,6 +327,7 @@ void GainPilotGtkEditor::buildTargetPanel(GtkWidget* parent) {
   addSlider(box, ParamId::targetLevel);
   addSlider(box, ParamId::inputTrim);
   addProgramModeChoice(box);
+  addChannelModeChoice(box);
 }
 
 void GainPilotGtkEditor::buildDynamicsPanel(GtkWidget* parent) {
@@ -345,6 +389,19 @@ void GainPilotGtkEditor::addProgramModeChoice(GtkWidget* parent) {
   programModeCombo_ = GTK_COMBO_BOX(combo);
 }
 
+void GainPilotGtkEditor::addChannelModeChoice(GtkWidget* parent) {
+  gtk_box_pack_start(GTK_BOX(parent), createLabel("Channel Mode", "gainpilot-subtitle"), FALSE, FALSE, 0);
+  auto* combo = gtk_combo_box_text_new();
+  for (const auto* label : kChannelModeLabels) {
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), label);
+  }
+  gtk_combo_box_set_active(GTK_COMBO_BOX(combo), static_cast<int>(ChannelMode::stereo));
+  g_object_set_data(G_OBJECT(combo), "gainpilot-param", GUINT_TO_POINTER(static_cast<unsigned>(ParamId::channelMode)));
+  g_signal_connect(combo, "changed", G_CALLBACK(onComboChanged), this);
+  gtk_box_pack_start(GTK_BOX(parent), combo, FALSE, FALSE, 0);
+  channelModeCombo_ = GTK_COMBO_BOX(combo);
+}
+
 void GainPilotGtkEditor::updateSlider(ParamId id, float value) {
   auto& binding = sliders_[sliderIndex(id)];
   if (binding.range == nullptr || binding.valueLabel == nullptr) {
@@ -362,6 +419,9 @@ void GainPilotGtkEditor::updateChoice(ParamId id, int value) {
   suppressEvents_ = true;
   if (id == ParamId::programMode && programModeCombo_ != nullptr) {
     gtk_combo_box_set_active(programModeCombo_, std::clamp(value, 0, static_cast<int>(kProgramModeLabels.size() - 1)));
+  }
+  if (id == ParamId::channelMode && channelModeCombo_ != nullptr) {
+    gtk_combo_box_set_active(channelModeCombo_, std::clamp(value, 0, static_cast<int>(kChannelModeLabels.size() - 1)));
   }
   suppressEvents_ = false;
 }
@@ -415,6 +475,59 @@ void GainPilotGtkEditor::onResetClicked(GtkButton*, gpointer userData) {
   }
 }
 
+gboolean GainPilotGtkEditor::onGraphDraw(GtkWidget* widget, cairo_t* context, gpointer userData) {
+  auto* editor = static_cast<GainPilotGtkEditor*>(userData);
+  if (editor == nullptr) {
+    return FALSE;
+  }
+
+  const double width = std::max(1, gtk_widget_get_allocated_width(widget));
+  const double height = std::max(1, gtk_widget_get_allocated_height(widget));
+  constexpr double kLeft = 38.0;
+  constexpr double kTop = 12.0;
+  const double graphWidth = std::max(1.0, width - kLeft - 12.0);
+  const double graphHeight = std::max(1.0, height - kTop - 22.0);
+
+  cairo_set_source_rgb(context, 0.043, 0.051, 0.055);
+  cairo_paint(context);
+  cairo_select_font_face(context, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
+  cairo_set_font_size(context, 9.0);
+
+  for (int value = -12; value <= 12; value += 4) {
+    const double y = kTop + static_cast<double>(12 - value) / 24.0 * graphHeight;
+    cairo_set_source_rgb(context, 0.15, 0.17, 0.18);
+    cairo_set_line_width(context, 1.0);
+    cairo_move_to(context, kLeft, y);
+    cairo_line_to(context, kLeft + graphWidth, y);
+    cairo_stroke(context);
+
+    char label[8];
+    std::snprintf(label, sizeof(label), "%+d", value);
+    cairo_set_source_rgb(context, 0.48, 0.50, 0.51);
+    cairo_move_to(context, 5.0, y + 3.0);
+    cairo_show_text(context, label);
+  }
+
+  if (editor->gainHistory_.size() < 2) {
+    return FALSE;
+  }
+
+  cairo_set_source_rgb(context, 0.18, 0.90, 0.84);
+  cairo_set_line_width(context, 2.0);
+  for (std::size_t index = 0; index < editor->gainHistory_.size(); ++index) {
+    const double x = kLeft + static_cast<double>(index) /
+                                 static_cast<double>(editor->gainHistory_.size() - 1) * graphWidth;
+    const double y = kTop + static_cast<double>(12.0f - editor->gainHistory_[index]) / 24.0 * graphHeight;
+    if (index == 0) {
+      cairo_move_to(context, x, y);
+    } else {
+      cairo_line_to(context, x, y);
+    }
+  }
+  cairo_stroke(context);
+  return FALSE;
+}
+
 std::size_t GainPilotGtkEditor::paramIndex(ParamId id) {
   return static_cast<std::size_t>(id);
 }
@@ -459,12 +572,17 @@ const char* GainPilotGtkEditor::formatValue(ParamId id, float value, char* buffe
     case ParamId::gainReductionValue:
       std::snprintf(buffer, size, "%.2f dB", value);
       return buffer;
+    case ParamId::appliedGainValue:
+      std::snprintf(buffer, size, "Current Gain: %+.2f dB", value);
+      return buffer;
     case ParamId::correctionHigh:
     case ParamId::correctionLow:
       std::snprintf(buffer, size, "%.1f %%", value);
       return buffer;
     case ParamId::programMode:
       return kProgramModeLabels[std::clamp(static_cast<int>(std::lround(value)), 0, static_cast<int>(kProgramModeLabels.size() - 1))];
+    case ParamId::channelMode:
+      return kChannelModeLabels[std::clamp(static_cast<int>(std::lround(value)), 0, static_cast<int>(kChannelModeLabels.size() - 1))];
     case ParamId::corrMixMode:
       return kCorrMixModeLabels[std::clamp(static_cast<int>(std::lround(value)), 0, static_cast<int>(kCorrMixModeLabels.size() - 1))];
     case ParamId::meterMode:
