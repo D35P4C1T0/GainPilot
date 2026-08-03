@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- Migrated LV2 and VST3 wrappers to the DISTRHO Plugin Framework.
+- Added DPF-native Audio Unit, CLAP, and optional standalone targets.
+- Fixed DPF Audio Unit buffer routing for hosts such as REAPER that replace input callback pointers.
+- Replaced the Cocoa, wxWidgets, and GTK editors with one resizable DGL/NanoVG editor.
+- Preserved the mono/stereo variants, parameter IDs, symbols, and versioned state payload.
+- Removed direct dependencies on the Steinberg VST3 SDK, LV2 SDK, GTK, and wxWidgets.
+- Assigned new LV2, VST3, and CLAP identities; pre-DPF sessions require migration through the old build.
+
 ## [0.2.0] - 2026-07-26
 
 - Added automatable Stereo/Mono processing with state migration for existing sessions.

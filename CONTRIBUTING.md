@@ -2,7 +2,7 @@
 
 ## Scope
 
-This project aims to keep one shared DSP core and thin native plugin wrappers.
+This project keeps one shared DSP core behind thin DPF plugin and UI adapters.
 Changes should preserve that separation unless there is a strong technical
 reason not to.
 
@@ -12,14 +12,15 @@ reason not to.
 - Run:
 
 ```sh
+git submodule update --init --recursive
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
 - Keep changes format-aware:
-  - `VST3` and `LV2` should stay behaviorally aligned unless the format itself
-    requires different handling
+  - `VST3`, `LV2`, and `CLAP` should stay behaviorally aligned unless the format
+    itself requires different handling
 
 ## Guidelines
 
@@ -32,9 +33,9 @@ ctest --test-dir build --output-on-failure
 
 ## UI Notes
 
-- Windows `VST3` currently uses a custom wxWidgets editor
-- Linux `LV2` currently uses a GTK3 UI
-- Linux `VST3` currently falls back to the host generic UI
+- All plugin formats use the same DGL/NanoVG editor.
+- Keep UI code independent of host APIs and platform toolkits.
+- Verify both mono and stereo metadata when changing parameter or layout code.
 
 If you change UI behavior, document the platform and format impact clearly.
 

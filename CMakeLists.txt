@@ -3,8 +3,8 @@ cmake_minimum_required(VERSION 3.25)
 project(
   GainPilot
   VERSION 0.2.0
-  DESCRIPTION "LUFS auto-leveler with native LV2 and VST3 targets"
-  LANGUAGES CXX
+  DESCRIPTION "LUFS auto-leveler built with the DISTRHO Plugin Framework"
+  LANGUAGES C CXX
 )
 
 include(GNUInstallDirs)
@@ -29,20 +29,27 @@ configure_file(
 
 if(UNIX AND NOT APPLE)
   set(GAINPILOT_ENABLE_LV2_DEFAULT ON)
-  set(GAINPILOT_ENABLE_LV2_UI_DEFAULT ON)
-  set(GAINPILOT_ENABLE_GTK_UI_DEFAULT ON)
 else()
   set(GAINPILOT_ENABLE_LV2_DEFAULT OFF)
-  set(GAINPILOT_ENABLE_LV2_UI_DEFAULT OFF)
-  set(GAINPILOT_ENABLE_GTK_UI_DEFAULT OFF)
+endif()
+if(APPLE)
+  set(GAINPILOT_ENABLE_AU_DEFAULT ON)
+else()
+  set(GAINPILOT_ENABLE_AU_DEFAULT OFF)
 endif()
 
-option(GAINPILOT_ENABLE_LV2 "Build LV2 plugin targets" ${GAINPILOT_ENABLE_LV2_DEFAULT})
-option(GAINPILOT_ENABLE_LV2_UI "Build LV2 GTK UI targets" ${GAINPILOT_ENABLE_LV2_UI_DEFAULT})
-option(GAINPILOT_ENABLE_TESTS "Build local smoke tests" ON)
-option(GAINPILOT_ENABLE_WX_UI "Build shared wxWidgets UI module" ON)
-option(GAINPILOT_ENABLE_GTK_UI "Build shared GTK UI module" ${GAINPILOT_ENABLE_GTK_UI_DEFAULT})
-option(GAINPILOT_ENABLE_UI_SNAPSHOT "Build the GTK UI snapshot renderer" OFF)
+option(GAINPILOT_ENABLE_VST3 "Build DPF VST3 plugin targets" ON)
+option(GAINPILOT_ENABLE_LV2 "Build DPF LV2 plugin targets" ${GAINPILOT_ENABLE_LV2_DEFAULT})
+option(GAINPILOT_ENABLE_CLAP "Build DPF CLAP plugin targets" ON)
+option(GAINPILOT_ENABLE_AU "Build DPF Audio Unit plugin targets on macOS" ${GAINPILOT_ENABLE_AU_DEFAULT})
+option(GAINPILOT_ENABLE_STANDALONE "Build DPF standalone plugin targets" OFF)
+option(GAINPILOT_ENABLE_TESTS "Build local DSP and state smoke tests" ON)
+set(
+  GAINPILOT_DPF_PATH
+  "${CMAKE_CURRENT_SOURCE_DIR}/dpf"
+  CACHE PATH
+  "Path to a DISTRHO Plugin Framework checkout"
+)
 
 add_library(
   gainpilot_core
@@ -60,7 +67,6 @@ target_include_directories(
 )
 
 target_compile_features(gainpilot_core PUBLIC cxx_std_20)
-
 target_compile_options(
   gainpilot_core
   PRIVATE
@@ -73,330 +79,233 @@ if(TARGET PkgConfig::EBUR128)
   target_compile_definitions(gainpilot_core PUBLIC GAINPILOT_USE_LIBEBUR128=1)
 endif()
 
-if(GAINPILOT_ENABLE_WX_UI)
-  find_package(wxWidgets QUIET COMPONENTS core base)
-  if(wxWidgets_FOUND)
-    include(${wxWidgets_USE_FILE})
+if(NOT EXISTS "${GAINPILOT_DPF_PATH}/CMakeLists.txt")
+  message(
+    FATAL_ERROR
+    "DPF was not found at ${GAINPILOT_DPF_PATH}. "
+    "Initialize submodules with: git submodule update --init --recursive"
+  )
+endif()
 
-    add_library(
-      gainpilot_ui
-      src/ui/wx_runtime.cpp
-      src/ui/editor_panel.cpp
-    )
-
-    target_include_directories(
-      gainpilot_ui
-      PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-        ${CMAKE_CURRENT_BINARY_DIR}/generated
-    )
-
-    target_link_libraries(gainpilot_ui PUBLIC gainpilot_core ${wxWidgets_LIBRARIES})
-    target_compile_features(gainpilot_ui PUBLIC cxx_std_20)
-    target_compile_options(
-      gainpilot_ui
-      PRIVATE
-        $<$<CXX_COMPILER_ID:MSVC>:/W4 /permissive->
-        $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic>
+if(APPLE AND GAINPILOT_ENABLE_AU)
+  find_package(Git REQUIRED)
+  set(
+    GAINPILOT_DPF_AU_PATCH
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/dpf-au-host-buffer-routing.patch"
+  )
+  execute_process(
+    COMMAND
+      "${GIT_EXECUTABLE}" apply --unidiff-zero --check "${GAINPILOT_DPF_AU_PATCH}"
+    WORKING_DIRECTORY "${GAINPILOT_DPF_PATH}"
+    RESULT_VARIABLE GAINPILOT_DPF_PATCH_CAN_APPLY
+    OUTPUT_QUIET
+    ERROR_QUIET
+  )
+  if(GAINPILOT_DPF_PATCH_CAN_APPLY EQUAL 0)
+    execute_process(
+      COMMAND
+        "${GIT_EXECUTABLE}" apply --unidiff-zero "${GAINPILOT_DPF_AU_PATCH}"
+      WORKING_DIRECTORY "${GAINPILOT_DPF_PATH}"
+      COMMAND_ERROR_IS_FATAL ANY
     )
   else()
-    message(STATUS "wxWidgets not found. Shared wx UI module is disabled.")
+    execute_process(
+      COMMAND
+        "${GIT_EXECUTABLE}" apply --unidiff-zero --reverse --check "${GAINPILOT_DPF_AU_PATCH}"
+      WORKING_DIRECTORY "${GAINPILOT_DPF_PATH}"
+      RESULT_VARIABLE GAINPILOT_DPF_PATCH_ALREADY_APPLIED
+      OUTPUT_QUIET
+      ERROR_QUIET
+    )
+    if(NOT GAINPILOT_DPF_PATCH_ALREADY_APPLIED EQUAL 0)
+      message(
+        FATAL_ERROR
+        "The GainPilot DPF Audio Unit compatibility patch does not apply cleanly "
+        "to ${GAINPILOT_DPF_PATH}."
+      )
+    endif()
   endif()
 endif()
 
-if(GAINPILOT_ENABLE_GTK_UI)
-  if(NOT PkgConfig_FOUND)
-    find_package(PkgConfig REQUIRED)
-  endif()
-  pkg_check_modules(GTK3 REQUIRED IMPORTED_TARGET gtk+-3.0)
+set(DPF_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(DPF_LIBRARIES OFF CACHE BOOL "" FORCE)
+add_subdirectory("${GAINPILOT_DPF_PATH}" "${CMAKE_CURRENT_BINARY_DIR}/dpf" EXCLUDE_FROM_ALL)
 
-  add_library(
-    gainpilot_gtk_ui
-    src/ui/gtk_editor.cpp
+set(gainpilot_dpf_targets)
+if(GAINPILOT_ENABLE_VST3)
+  list(APPEND gainpilot_dpf_targets vst3)
+endif()
+if(GAINPILOT_ENABLE_LV2)
+  list(APPEND gainpilot_dpf_targets lv2)
+endif()
+if(GAINPILOT_ENABLE_CLAP)
+  list(APPEND gainpilot_dpf_targets clap)
+endif()
+if(GAINPILOT_ENABLE_AU)
+  if(NOT APPLE)
+    message(FATAL_ERROR "GAINPILOT_ENABLE_AU is only supported on macOS.")
+  endif()
+  list(APPEND gainpilot_dpf_targets au)
+endif()
+if(GAINPILOT_ENABLE_STANDALONE)
+  list(APPEND gainpilot_dpf_targets jack)
+endif()
+
+if(NOT gainpilot_dpf_targets)
+  message(FATAL_ERROR "At least one GainPilot DPF plugin format must be enabled.")
+endif()
+
+function(gainpilot_add_dpf_plugin target info_directory bundle_identifier display_name)
+  dpf_add_plugin(
+    ${target}
+    TARGETS ${gainpilot_dpf_targets}
+    FILES_DSP src/dpf/GainPilotPlugin.cpp
+    FILES_UI src/dpf/GainPilotUI.cpp
   )
 
   target_include_directories(
-    gainpilot_gtk_ui
+    ${target}
     PUBLIC
+      ${CMAKE_CURRENT_SOURCE_DIR}/${info_directory}
       ${CMAKE_CURRENT_SOURCE_DIR}/include
       ${CMAKE_CURRENT_BINARY_DIR}/generated
   )
-
-  target_link_libraries(gainpilot_gtk_ui PUBLIC gainpilot_core PkgConfig::GTK3)
-  target_compile_features(gainpilot_gtk_ui PUBLIC cxx_std_20)
+  target_link_libraries(${target} PUBLIC gainpilot_core)
+  target_compile_features(${target} PUBLIC cxx_std_20)
   target_compile_options(
-    gainpilot_gtk_ui
+    ${target}-dsp
     PRIVATE
       $<$<CXX_COMPILER_ID:MSVC>:/W4 /permissive->
       $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic>
   )
-endif()
+  target_compile_options(
+    ${target}-ui
+    PRIVATE
+      $<$<CXX_COMPILER_ID:MSVC>:/W4 /permissive->
+      $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra>
+  )
 
-if(GAINPILOT_ENABLE_UI_SNAPSHOT)
   if(APPLE)
-    find_library(GAINPILOT_SNAPSHOT_COCOA_FRAMEWORK Cocoa REQUIRED)
-    add_executable(gainpilot_ui_snapshot tools/render_mac_ui.mm src/vst3/mac_view.mm)
-    target_link_libraries(
-      gainpilot_ui_snapshot
-      PRIVATE
-        gainpilot_core
-        sdk
-        ${GAINPILOT_SNAPSHOT_COCOA_FRAMEWORK}
-    )
-    target_include_directories(
-      gainpilot_ui_snapshot
-      PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-        ${CMAKE_CURRENT_BINARY_DIR}/generated
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/vst3
-    )
-  else()
-    if(NOT TARGET gainpilot_gtk_ui)
-      message(FATAL_ERROR "GAINPILOT_ENABLE_UI_SNAPSHOT requires GAINPILOT_ENABLE_GTK_UI.")
-    endif()
-    add_executable(gainpilot_ui_snapshot tools/render_gtk_ui.cpp)
-    target_link_libraries(gainpilot_ui_snapshot PRIVATE gainpilot_gtk_ui)
+    set(GAINPILOT_BUNDLE_EXECUTABLE "${target}")
+    set(GAINPILOT_BUNDLE_IDENTIFIER "${bundle_identifier}")
+    set(GAINPILOT_BUNDLE_DISPLAY_NAME "${display_name}")
+    foreach(bundle_extension vst3 clap)
+      if(
+        (bundle_extension STREQUAL "vst3" AND GAINPILOT_ENABLE_VST3)
+        OR (bundle_extension STREQUAL "clap" AND GAINPILOT_ENABLE_CLAP)
+      )
+        configure_file(
+          "${CMAKE_CURRENT_SOURCE_DIR}/cmake/GainPilotPluginInfo.plist.in"
+          "${CMAKE_CURRENT_BINARY_DIR}/bin/${target}.${bundle_extension}/Contents/Info.plist"
+          @ONLY
+        )
+      endif()
+    endforeach()
+
+    foreach(bundle_extension vst3 clap component)
+      if(
+        (bundle_extension STREQUAL "vst3" AND GAINPILOT_ENABLE_VST3)
+        OR (bundle_extension STREQUAL "clap" AND GAINPILOT_ENABLE_CLAP)
+        OR (bundle_extension STREQUAL "component" AND GAINPILOT_ENABLE_AU)
+      )
+        if(bundle_extension STREQUAL "component")
+          set(bundle_target "${target}-au")
+        else()
+          set(bundle_target "${target}-${bundle_extension}")
+        endif()
+        add_custom_command(
+          TARGET ${bundle_target}
+          POST_BUILD
+          COMMAND
+            /usr/bin/codesign
+            --force
+            --deep
+            --sign -
+            "${CMAKE_CURRENT_BINARY_DIR}/bin/${target}.${bundle_extension}"
+          COMMENT "Ad-hoc signing ${target}.${bundle_extension} for local macOS loading"
+          VERBATIM
+        )
+      endif()
+    endforeach()
   endif()
-  target_compile_features(gainpilot_ui_snapshot PRIVATE cxx_std_20)
-  target_compile_options(
-    gainpilot_ui_snapshot
-    PRIVATE
-      $<$<CXX_COMPILER_ID:MSVC>:/W4 /permissive->
-      $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic>
-  )
-endif()
+endfunction()
+
+gainpilot_add_dpf_plugin(
+  GainPilot
+  src/dpf/stereo
+  dev.gainpilot.gainpilot.stereo
+  GainPilot
+)
+gainpilot_add_dpf_plugin(
+  GainPilotMono
+  src/dpf/mono
+  dev.gainpilot.gainpilot.mono
+  "GainPilot Mono"
+)
+
+set(GAINPILOT_PLUGIN_NAMES GainPilot GainPilotMono)
 
 if(GAINPILOT_ENABLE_LV2)
-  if(NOT PkgConfig_FOUND)
-    find_package(PkgConfig REQUIRED)
-  endif()
-  pkg_check_modules(LV2 REQUIRED IMPORTED_TARGET lv2)
-  if(GAINPILOT_ENABLE_LV2_UI)
-    if(NOT TARGET gainpilot_gtk_ui)
-      message(FATAL_ERROR "GAINPILOT_ENABLE_LV2_UI requires GTK UI support.")
-    endif()
-  endif()
-
-  set(GAINPILOT_LV2_BUNDLE_ROOT "${CMAKE_BINARY_DIR}/lv2")
-
-  function(gainpilot_add_lv2_target target_name plugin_name channel_count plugin_uri ttl_template)
-    set(bundle_dir "${GAINPILOT_LV2_BUNDLE_ROOT}/${plugin_name}.lv2")
-    file(MAKE_DIRECTORY "${bundle_dir}")
-
-    add_library(${target_name} MODULE src/lv2/plugin.cpp)
-    target_link_libraries(${target_name} PRIVATE gainpilot_core PkgConfig::LV2)
-    target_compile_definitions(
-      ${target_name}
-      PRIVATE
-        GAINPILOT_LV2_URI="${plugin_uri}"
-        GAINPILOT_LV2_CHANNELS=${channel_count}
+  foreach(plugin_name IN LISTS GAINPILOT_PLUGIN_NAMES)
+    install(
+      DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/bin/${plugin_name}.lv2"
+      DESTINATION "${CMAKE_INSTALL_LIBDIR}/lv2"
+      USE_SOURCE_PERMISSIONS
     )
-    set_target_properties(
-      ${target_name}
-      PROPERTIES
-        PREFIX ""
-        OUTPUT_NAME "${plugin_name}"
-        LIBRARY_OUTPUT_DIRECTORY "${bundle_dir}"
-    )
-
-    set(plugin_name "${plugin_name}")
-    set(plugin_uri "${plugin_uri}")
-    set(ui_uri "${plugin_uri}-ui")
-    set(ui_binary_name "${plugin_name}_ui")
-    if(channel_count EQUAL 1)
-      set(CHANNEL_PORTS [=[
-    [
-      a lv2:OutputPort, lv2:AudioPort ;
-      lv2:index 1 ;
-      lv2:symbol "out_l" ;
-      lv2:name "Output"
-    ] ,
-]=])
-      set(CONTROL_BASE 2)
-    else()
-      set(CHANNEL_PORTS [=[
-    [
-      a lv2:InputPort, lv2:AudioPort ;
-      lv2:index 1 ;
-      lv2:symbol "in_r" ;
-      lv2:name "Input R"
-    ] ,
-    [
-      a lv2:OutputPort, lv2:AudioPort ;
-      lv2:index 2 ;
-      lv2:symbol "out_l" ;
-      lv2:name "Output L"
-    ] ,
-    [
-      a lv2:OutputPort, lv2:AudioPort ;
-      lv2:index 3 ;
-      lv2:symbol "out_r" ;
-      lv2:name "Output R"
-    ] ,
-]=])
-      set(CONTROL_BASE 4)
-    endif()
-    math(EXPR CONTROL_BASE_PLUS_1 "${CONTROL_BASE} + 1")
-    math(EXPR CONTROL_BASE_PLUS_2 "${CONTROL_BASE} + 2")
-    math(EXPR CONTROL_BASE_PLUS_3 "${CONTROL_BASE} + 3")
-    math(EXPR CONTROL_BASE_PLUS_4 "${CONTROL_BASE} + 4")
-    math(EXPR CONTROL_BASE_PLUS_5 "${CONTROL_BASE} + 5")
-    math(EXPR CONTROL_BASE_PLUS_6 "${CONTROL_BASE} + 6")
-    math(EXPR CONTROL_BASE_PLUS_7 "${CONTROL_BASE} + 7")
-    math(EXPR CONTROL_BASE_PLUS_8 "${CONTROL_BASE} + 8")
-    math(EXPR CONTROL_BASE_PLUS_9 "${CONTROL_BASE} + 9")
-    math(EXPR CONTROL_BASE_PLUS_10 "${CONTROL_BASE} + 10")
-    math(EXPR CONTROL_BASE_PLUS_11 "${CONTROL_BASE} + 11")
-    math(EXPR CONTROL_BASE_PLUS_12 "${CONTROL_BASE} + 12")
-    math(EXPR CONTROL_BASE_PLUS_13 "${CONTROL_BASE} + 13")
-    math(EXPR CONTROL_BASE_PLUS_14 "${CONTROL_BASE} + 14")
-    math(EXPR CONTROL_BASE_PLUS_15 "${CONTROL_BASE} + 15")
-    math(EXPR CONTROL_BASE_PLUS_16 "${CONTROL_BASE} + 16")
-    math(EXPR CONTROL_BASE_PLUS_17 "${CONTROL_BASE} + 17")
-    math(EXPR CONTROL_BASE_PLUS_18 "${CONTROL_BASE} + 18")
-    math(EXPR CONTROL_BASE_PLUS_19 "${CONTROL_BASE} + 19")
-
-    if(GAINPILOT_ENABLE_LV2_UI)
-      add_library(${target_name}_ui MODULE src/lv2/ui.cpp)
-      target_link_libraries(${target_name}_ui PRIVATE gainpilot_gtk_ui PkgConfig::LV2)
-      target_include_directories(
-        ${target_name}_ui
-        PRIVATE
-          ${CMAKE_CURRENT_SOURCE_DIR}/include
-          ${CMAKE_CURRENT_BINARY_DIR}/generated
-      )
-      target_compile_definitions(
-        ${target_name}_ui
-        PRIVATE
-          GAINPILOT_LV2_URI="${plugin_uri}"
-          GAINPILOT_LV2_UI_URI="${ui_uri}"
-          GAINPILOT_LV2_CHANNELS=${channel_count}
-      )
-      set_target_properties(
-        ${target_name}_ui
-        PROPERTIES
-          PREFIX ""
-          OUTPUT_NAME "${ui_binary_name}"
-          LIBRARY_OUTPUT_DIRECTORY "${bundle_dir}"
-      )
-      set(PLUGIN_UI_REFERENCE "  ui:ui <${ui_uri}> ;")
-      configure_file("${CMAKE_CURRENT_SOURCE_DIR}/lv2/ui.ttl.in" "${bundle_dir}/${plugin_name}_ui.ttl" @ONLY)
-      set(UI_MANIFEST_ENTRY_TEMPLATE [=[
-<@ui_uri@>
-  a <http://lv2plug.in/ns/extensions/ui#Gtk3UI> ;
-  <http://lv2plug.in/ns/extensions/ui#binary> <@ui_binary_name@.so> ;
-  rdfs:seeAlso <@plugin_name@_ui.ttl> .
-]=])
-      string(CONFIGURE "${UI_MANIFEST_ENTRY_TEMPLATE}" UI_MANIFEST_ENTRY @ONLY)
-    else()
-      set(PLUGIN_UI_REFERENCE "")
-      set(UI_MANIFEST_ENTRY "")
-    endif()
-
-    configure_file("${CMAKE_CURRENT_SOURCE_DIR}/lv2/manifest.ttl.in" "${bundle_dir}/manifest.ttl" @ONLY)
-    configure_file("${CMAKE_CURRENT_SOURCE_DIR}/lv2/${ttl_template}" "${bundle_dir}/${plugin_name}.ttl" @ONLY)
-
-    install(DIRECTORY "${bundle_dir}/" DESTINATION "${CMAKE_INSTALL_LIBDIR}/lv2/${plugin_name}.lv2")
-  endfunction()
-
-  gainpilot_add_lv2_target(
-    gainpilot_lv2_mono
-    gainpilot_mono
-    1
-    "https://gainpilot.dev/plugins/gainpilot-mono"
-    plugin.ttl.in
-  )
-
-  gainpilot_add_lv2_target(
-    gainpilot_lv2_stereo
-    gainpilot_stereo
-    2
-    "https://gainpilot.dev/plugins/gainpilot-stereo"
-    plugin.ttl.in
-  )
+  endforeach()
 endif()
 
-set(GAINPILOT_VST3_SDK_PATH "${CMAKE_CURRENT_SOURCE_DIR}/external/vst3sdk" CACHE PATH "Path to a VST3 SDK checkout")
-
-if(EXISTS "${GAINPILOT_VST3_SDK_PATH}/CMakeLists.txt")
-  set(SMTG_ENABLE_VST3_PLUGIN_EXAMPLES OFF CACHE BOOL "" FORCE)
-  set(SMTG_ENABLE_VST3_HOSTING_EXAMPLES OFF CACHE BOOL "" FORCE)
-  set(SMTG_ENABLE_VSTGUI_SUPPORT OFF CACHE BOOL "" FORCE)
-  set(SMTG_CREATE_PLUGIN_LINK OFF CACHE BOOL "" FORCE)
-  set(SMTG_RUN_VST_VALIDATOR OFF CACHE BOOL "" FORCE)
-  add_subdirectory("${GAINPILOT_VST3_SDK_PATH}" "${CMAKE_BINARY_DIR}/vst3sdk" EXCLUDE_FROM_ALL)
-
-  set(gainpilot_vst3_sources
-    ${GAINPILOT_VST3_SDK_PATH}/public.sdk/source/main/moduleinit.cpp
-    ${GAINPILOT_VST3_SDK_PATH}/public.sdk/source/vst/vstsinglecomponenteffect.cpp
-    src/vst3/common.cpp
-    src/vst3/controller.cpp
-    src/vst3/plugin.cpp
-    src/vst3/entry.cpp
-  )
-  if(WIN32 AND TARGET gainpilot_ui)
-    list(APPEND gainpilot_vst3_sources src/vst3/wx_view.cpp)
-  endif()
-  if(APPLE)
-    list(APPEND gainpilot_vst3_sources src/vst3/mac_view.mm)
-  endif()
-  if(UNIX AND NOT APPLE AND TARGET gainpilot_gtk_ui)
-    list(APPEND gainpilot_vst3_sources src/vst3/gtk_view.cpp)
-  endif()
+if(GAINPILOT_ENABLE_VST3)
   if(WIN32)
-    list(APPEND gainpilot_vst3_sources ${GAINPILOT_VST3_SDK_PATH}/public.sdk/source/main/dllmain.cpp)
-  elseif(APPLE)
-    list(APPEND gainpilot_vst3_sources ${GAINPILOT_VST3_SDK_PATH}/public.sdk/source/main/macmain.cpp)
-  elseif(UNIX AND NOT APPLE)
-    list(APPEND gainpilot_vst3_sources ${GAINPILOT_VST3_SDK_PATH}/public.sdk/source/main/linuxmain.cpp)
-  endif()
-
-  smtg_add_vst3plugin(gainpilot_vst3 PACKAGE_NAME "GainPilot" SOURCES_LIST ${gainpilot_vst3_sources})
-  target_link_libraries(gainpilot_vst3 PRIVATE gainpilot_core sdk)
-  if(WIN32 AND TARGET gainpilot_ui)
-    target_link_libraries(gainpilot_vst3 PRIVATE gainpilot_ui)
-    target_compile_definitions(gainpilot_vst3 PRIVATE GAINPILOT_VST3_USE_WX_VIEW=1)
-  endif()
-  if(APPLE)
-    find_library(COCOA_FRAMEWORK Cocoa REQUIRED)
-    target_link_libraries(gainpilot_vst3 PRIVATE ${COCOA_FRAMEWORK})
-  endif()
-  if(UNIX AND NOT APPLE AND TARGET gainpilot_gtk_ui)
-    target_link_libraries(gainpilot_vst3 PRIVATE gainpilot_gtk_ui)
-    target_compile_definitions(gainpilot_vst3 PRIVATE GAINPILOT_VST3_USE_GTK_VIEW=1)
-  endif()
-  target_include_directories(
-    gainpilot_vst3
-    PRIVATE
-      ${CMAKE_CURRENT_SOURCE_DIR}/include
-      ${CMAKE_CURRENT_BINARY_DIR}/generated
-      ${CMAKE_CURRENT_SOURCE_DIR}/src
-  )
-  target_compile_features(gainpilot_vst3 PRIVATE cxx_std_20)
-  if(WIN32)
-    target_compile_definitions(gainpilot_vst3 PRIVATE NOMINMAX)
-  endif()
-  add_custom_command(
-    TARGET gainpilot_vst3
-    POST_BUILD
-    COMMAND "${CMAKE_COMMAND}" -E rm -f "$<TARGET_FILE_DIR:gainpilot_vst3>/../Resources/gainpilot.uidesc"
-  )
-
-  if(WIN32)
-    set(GAINPILOT_VST3_INSTALL_DESTINATION ".")
+    set(GAINPILOT_VST3_INSTALL_DESTINATION "VST3")
   elseif(APPLE)
     set(GAINPILOT_VST3_INSTALL_DESTINATION "Library/Audio/Plug-Ins/VST3")
   else()
     set(GAINPILOT_VST3_INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/vst3")
   endif()
 
-  install(
-    DIRECTORY "${CMAKE_BINARY_DIR}/VST3/$<CONFIG>/GainPilot.vst3"
-    DESTINATION "${GAINPILOT_VST3_INSTALL_DESTINATION}"
-    USE_SOURCE_PERMISSIONS
-  )
-else()
-  message(STATUS "VST3 SDK not found. VST3 targets are disabled for now.")
+  foreach(plugin_name IN LISTS GAINPILOT_PLUGIN_NAMES)
+    install(
+      DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/bin/${plugin_name}.vst3"
+      DESTINATION "${GAINPILOT_VST3_INSTALL_DESTINATION}"
+      USE_SOURCE_PERMISSIONS
+    )
+  endforeach()
+endif()
+
+if(GAINPILOT_ENABLE_CLAP)
+  if(WIN32)
+    set(GAINPILOT_CLAP_INSTALL_DESTINATION "CLAP")
+  elseif(APPLE)
+    set(GAINPILOT_CLAP_INSTALL_DESTINATION "Library/Audio/Plug-Ins/CLAP")
+  else()
+    set(GAINPILOT_CLAP_INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/clap")
+  endif()
+
+  foreach(plugin_name IN LISTS GAINPILOT_PLUGIN_NAMES)
+    if(APPLE)
+      install(
+        DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/bin/${plugin_name}.clap"
+        DESTINATION "${GAINPILOT_CLAP_INSTALL_DESTINATION}"
+        USE_SOURCE_PERMISSIONS
+      )
+    else()
+      install(
+        FILES "${CMAKE_CURRENT_BINARY_DIR}/bin/${plugin_name}.clap"
+        DESTINATION "${GAINPILOT_CLAP_INSTALL_DESTINATION}"
+      )
+    endif()
+  endforeach()
+endif()
+
+if(GAINPILOT_ENABLE_AU)
+  foreach(plugin_name IN LISTS GAINPILOT_PLUGIN_NAMES)
+    install(
+      DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/bin/${plugin_name}.component"
+      DESTINATION "Library/Audio/Plug-Ins/Components"
+      USE_SOURCE_PERMISSIONS
+    )
+  endforeach()
 endif()
 
 if(GAINPILOT_ENABLE_TESTS)
@@ -404,33 +313,21 @@ if(GAINPILOT_ENABLE_TESTS)
   add_executable(gainpilot_smoke tests/smoke.cpp)
   target_link_libraries(gainpilot_smoke PRIVATE gainpilot_core)
   add_test(NAME gainpilot_smoke COMMAND gainpilot_smoke)
-
-  if(GAINPILOT_ENABLE_LV2)
-    add_executable(gainpilot_lv2_state_smoke tests/lv2_state_smoke.cpp src/lv2/plugin.cpp)
-    target_link_libraries(gainpilot_lv2_state_smoke PRIVATE gainpilot_core PkgConfig::LV2)
-    target_compile_definitions(
-      gainpilot_lv2_state_smoke
-      PRIVATE
-        GAINPILOT_LV2_URI="https://gainpilot.dev/plugins/gainpilot-stereo"
-        GAINPILOT_LV2_CHANNELS=2
-    )
-    add_test(NAME gainpilot_lv2_state_smoke COMMAND gainpilot_lv2_state_smoke)
-  endif()
 endif()
 
 set(CPACK_PACKAGE_NAME "GainPilot")
 set(CPACK_PACKAGE_VENDOR "GainPilot contributors")
 set(CPACK_PACKAGE_CONTACT "opensource@gainpilot.dev")
-set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "LUFS auto-leveler with native VST3 and LV2 targets")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "DPF-based LUFS auto-leveler for VST3, Audio Unit, LV2, and CLAP")
 set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE.txt")
 set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
-set(CPACK_PACKAGE_DIRECTORY "${CMAKE_BINARY_DIR}/packages")
+set(CPACK_PACKAGE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/packages")
 set(CPACK_INCLUDE_TOPLEVEL_DIRECTORY OFF)
 
 if(WIN32)
   set(CPACK_GENERATOR "ZIP;NSIS;WIX")
   set(CPACK_PACKAGE_FILE_NAME "gainpilot-${PROJECT_VERSION}-windows-x64")
-  set(CPACK_PACKAGE_INSTALL_DIRECTORY "VST3")
+  set(CPACK_PACKAGE_INSTALL_DIRECTORY "GainPilot")
   set(CPACK_NSIS_DISPLAY_NAME "GainPilot")
   set(CPACK_NSIS_PACKAGE_NAME "GainPilot")
   set(CPACK_NSIS_INSTALL_ROOT "$COMMONFILES64")

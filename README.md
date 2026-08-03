@@ -1,164 +1,131 @@
 # GainPilot
 
-GainPilot is a native loudness auto-leveler built around
-BS.1770 / EBU-R128 loudness workflows. It uses a shared C++ DSP core with
-native `VST3` and `LV2` wrappers, targets Windows, Linux, and macOS for `VST3`,
-and focuses on practical program loudness control with true-peak protection.
+GainPilot is an adaptive loudness auto-leveler built around BS.1770 / EBU-R128
+workflows. A shared C++ DSP core is exported through the
+[DISTRHO Plugin Framework](https://github.com/DISTRHO/DPF), giving every format
+the same processing, parameters, state model, and cross-platform DGL editor.
 
 ## Status
 
-This repository is usable and builds locally, but it should still be treated as
-an actively evolving project rather than a finished 1.0 release.
+This repository builds two plugin variants:
 
-Current scope:
+- `GainPilot`: stereo input and output with an automatable stereo/mono mode
+- `GainPilotMono`: dedicated mono input and output
 
-- Native `VST3`
-  - Windows: custom wxWidgets editor
-  - Linux: custom GTK3 editor when GTK support is enabled
-  - macOS: native Cocoa editor
-- Native `LV2`
-  - Linux: custom GTK3 UI
-- Mono and stereo plugin variants
-- Shared DSP core across formats
-- BS.1770 / EBU-R128 loudness metering
-- True-peak limiting
-- Cross-format state serialization
-- GitHub Actions packaging for Windows and Linux
+DPF exports both variants as:
+
+- VST3 on Windows, Linux, and macOS
+- Audio Unit on macOS
+- CLAP on Windows, Linux, and macOS
+- LV2 on Linux by default
+- an optional standalone application for development
 
 ## Features
 
-- Simplified main controls: `Target Level`, `True Peak`, `Max Gain`
-- User-selectable `Stereo` / `Mono` processing, with linked stereo gain and a defined `0.5 * (L + R)` mono downmix
 - Target-based loudness auto-leveling with learned input loudness
-- Input loudness meter with `Integrated` readout in the editor
-- Live applied-gain history and current-gain readout
-- True-peak ceiling control
-- Mono and stereo builds with shared behavior
-- LV2 state save/restore
-- VST3 and LV2 artifact packaging from CMake/CPack
+- BS.1770 / EBU-R128 integrated, short-term, and momentary metering
+- Linked stereo processing and a defined `0.5 * (L + R)` mono downmix
+- True-peak ceiling and lookahead limiting
+- Automatic and speech program modes
+- Input trim, maximum gain, and advanced correction controls
+- Versioned cross-format parameter state
+- One resizable DGL/NanoVG editor across all plugin formats and platforms
+- Live applied-gain history and loudness readouts
 
 ## Build Requirements
 
 Core requirements:
 
-- CMake `3.25+`
-- C++20 compiler
+- CMake 3.25 or newer
+- A C++20 compiler
+- Git submodules initialized recursively
 
-Linux:
+Linux UI builds also require OpenGL and X11 development packages. On Debian or
+Ubuntu:
 
-- `pkg-config`
-- `libebur128`
-- `lv2`
-- `gtk+-3.0`
-- optional: `wxWidgets` if you want to build the shared Windows-oriented UI
+```sh
+sudo apt-get install build-essential cmake pkg-config \
+  libgl1-mesa-dev libx11-dev libxcursor-dev libxext-dev libxrandr-dev
+```
 
-macOS:
-
-- Xcode Command Line Tools or another C++20-capable toolchain
-- full Xcode is recommended for the cleanest Apple build flow
-
-Windows:
-
-- Visual Studio 2022 or another C++20-capable toolchain
-- `wxWidgets` for the custom VST3 editor
-
-VST3:
-
-- Steinberg VST3 SDK checked out at `external/vst3sdk`
+`libebur128` is used when available; GainPilot retains its internal meter when
+it is not installed. DPF and its nested Pugl dependency are pinned as Git
+submodules. The Steinberg VST3 SDK, wxWidgets, GTK, and native LV2 SDK are no
+longer direct project dependencies.
 
 ## Quick Start
 
-Clone the VST3 SDK into the expected location:
+Clone with submodules:
 
 ```sh
-git clone --depth 1 --recurse-submodules https://github.com/steinbergmedia/vst3sdk external/vst3sdk
+git clone --recurse-submodules <gainpilot-repository-url>
+cd GainPilot
 ```
 
-Configure and build:
+For an existing checkout:
+
+```sh
+git submodule update --init --recursive
+```
+
+Configure, build, and test:
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build
-```
-
-Run the local tests:
-
-```sh
+cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
 
-Install into a staging prefix:
+Generated plugins are placed in `build/bin`. Install into a staging prefix and
+create distributable archives with:
 
 ```sh
 cmake --install build --prefix "$HOME/.local"
-```
-
-Typical install layout:
-
-- Linux
-  - `lib/lv2/*.lv2`
-  - `lib/vst3/GainPilot.vst3`
-- macOS
-  - `Library/Audio/Plug-Ins/VST3/GainPilot.vst3`
-- Windows
-  - `VST3/GainPilot.vst3`
-
-Generate distributable archives:
-
-```sh
 cpack --config build/CPackConfig.cmake
 ```
 
+Typical install locations under the selected prefix are:
+
+- Linux: `lib/vst3`, `lib/lv2`, and `lib/clap`
+- macOS: `Library/Audio/Plug-Ins/VST3`, `Library/Audio/Plug-Ins/Components`, and `Library/Audio/Plug-Ins/CLAP`
+- Windows: `VST3` and `CLAP`
+
 ## CMake Options
 
-- `GAINPILOT_ENABLE_LV2`
-- `GAINPILOT_ENABLE_LV2_UI`
-- `GAINPILOT_ENABLE_TESTS`
-- `GAINPILOT_ENABLE_WX_UI`
-- `GAINPILOT_ENABLE_GTK_UI`
-- `GAINPILOT_ENABLE_UI_SNAPSHOT`
-- `GAINPILOT_VST3_SDK_PATH`
+- `GAINPILOT_ENABLE_VST3` — build VST3 bundles; default `ON`
+- `GAINPILOT_ENABLE_LV2` — build LV2 bundles; default `ON` on Linux
+- `GAINPILOT_ENABLE_CLAP` — build CLAP plugins; default `ON`
+- `GAINPILOT_ENABLE_AU` — build Audio Unit components; default `ON` on macOS
+- `GAINPILOT_ENABLE_STANDALONE` — build DPF standalone applications; default `OFF`
+- `GAINPILOT_ENABLE_TESTS` — build DSP/state smoke tests; default `ON`
+- `GAINPILOT_DPF_PATH` — use another DPF checkout instead of `dpf/`
 
 ## Project Layout
 
-- `include/`
-  Public headers and shared interfaces
-- `src/dsp/`
-  Shared DSP implementation
-- `src/vst3/`
-  Native VST3 wrapper and controller
-- `src/lv2/`
-  Native LV2 wrapper and UI bridge
-- `src/ui/`
-  Shared editor code
-- `tests/`
-  Smoke tests
+- `dpf/` — pinned DISTRHO Plugin Framework submodule
+- `include/gainpilot/` — shared parameter, state, and DSP interfaces
+- `src/dsp/` — format-independent loudness and limiter implementation
+- `src/dpf/` — DPF plugin adapter, DGL editor, and mono/stereo metadata
+- `tests/` — deterministic DSP and state smoke tests
 
-## CI and Packaging
+## Compatibility Note
 
-GitHub Actions builds:
-
-- Linux packages and staged install trees
-- Windows packages and staged install trees
-
-Artifacts are produced as archives from the CMake install layout rather than
-raw build folders.
-
-## Known Notes
-
-- The Linux `VST3` build falls back to the host's generic UI when GTK support
-  is disabled.
-- The Steinberg VST3 SDK is not redistributed with this repository.
-- `reference/` is ignored and is not part of the public source tree.
+The GainPilot parameter IDs, symbols, and versioned state payload are retained.
+DPF requires a different LV2 port topology and generates new VST3 components,
+so the DPF builds intentionally use new LV2, VST3, and CLAP identities. Projects
+saved with a pre-DPF build will not substitute the new plugin automatically;
+render the old instance or copy its settings before replacing it. The new DPF
+formats share the same GainPilot state payload with each other.
 
 ## Contributing
 
-See `CONTRIBUTING.md`.
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-MIT. See `LICENSE`.
+GainPilot is MIT licensed. See [LICENSE](LICENSE). DPF is distributed under its
+own ISC license in the `dpf/` submodule.
 
 ## Changelog
 
-Versioned changes are tracked in `CHANGELOG.md`.
+Versioned changes are tracked in [CHANGELOG.md](CHANGELOG.md).
