@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.25)
 
 project(
   GainPilot
-  VERSION 0.2.0
+  VERSION 0.3.0
   DESCRIPTION "LUFS auto-leveler built with the DISTRHO Plugin Framework"
   LANGUAGES C CXX
 )

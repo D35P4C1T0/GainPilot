@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## [0.3.0] - 2026-08-03
+
 - Migrated LV2 and VST3 wrappers to the DISTRHO Plugin Framework.
 - Added DPF-native Audio Unit, CLAP, and optional standalone targets.
 - Fixed DPF Audio Unit buffer routing for hosts such as REAPER that replace input callback pointers.
