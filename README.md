@@ -32,6 +32,14 @@ DPF exports both variants as:
 - One resizable DGL/NanoVG editor across all plugin formats and platforms
 - Live applied-gain history and loudness readouts
 
+<!-- gainpilot-ui-snapshot:start -->
+
+## Plugin UI
+
+![GainPilot plugin UI](docs/assets/gainpilot-ui.png)
+
+<!-- gainpilot-ui-snapshot:end -->
+
 ## Build Requirements
 
 Core requirements:
