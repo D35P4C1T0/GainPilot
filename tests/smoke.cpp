@@ -372,7 +372,7 @@ int main() {
     std::vector<float> uncorrelatedSignal(measurementFrames, 0.0f);
     for (std::size_t i = 0; i < measurementFrames; ++i) {
       uncorrelatedSignal[i] =
-          0.1f * std::sin(2.0f * kPi * 631.0f * static_cast<float>(i) / static_cast<float>(sampleRate));
+          0.1f * std::cos(2.0f * kPi * 997.0f * static_cast<float>(i) / static_cast<float>(sampleRate));
     }
     const float uncorrelatedStereoLufs =
         measureStereoIntegratedLufs(monoSignal, uncorrelatedSignal, sampleRate);
