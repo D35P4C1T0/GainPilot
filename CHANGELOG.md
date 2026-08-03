@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 ## [0.3.0] - 2026-08-03
 
 - Migrated LV2 and VST3 wrappers to the DISTRHO Plugin Framework.
+- Updated the pinned DPF revision for Linux and Windows build compatibility.
 - Added DPF-native Audio Unit, CLAP, and optional standalone targets.
 - Fixed DPF Audio Unit buffer routing for hosts such as REAPER that replace input callback pointers.
 - Replaced the Cocoa, wxWidgets, and GTK editors with one resizable DGL/NanoVG editor.

@@ -1,38 +1,38 @@
 diff --git a/distrho/src/DistrhoPluginAU.cpp b/distrho/src/DistrhoPluginAU.cpp
-index 919faa71..718e6456 100644
+index 28a2d8de..5ec7ed31 100644
 --- a/distrho/src/DistrhoPluginAU.cpp
 +++ b/distrho/src/DistrhoPluginAU.cpp
-@@ -539,0 +540,6 @@ public:
+@@ -532,0 +533,6 @@ public:
 +            if (inScope == kAudioUnitScope_Global)
 +            {
 +                outDataSize = sizeof(Float64);
 +                outWritable = true;
 +                return noErr;
 +            }
-@@ -649 +655,3 @@ public:
+@@ -642 +648,3 @@ public:
 -            DISTRHO_SAFE_ASSERT_UINT_RETURN(inScope == kAudioUnitScope_Input, inScope, kAudioUnitErr_InvalidScope);
 +            // REAPER uses the legacy global-scope alias for effect input callbacks.
 +            DISTRHO_SAFE_ASSERT_UINT_RETURN(inScope == kAudioUnitScope_Input || inScope == kAudioUnitScope_Global,
 +                                            inScope, kAudioUnitErr_InvalidScope);
-@@ -846,0 +855,5 @@ public:
+@@ -839,0 +848,5 @@ public:
 +            if (inScope == kAudioUnitScope_Global)
 +            {
 +                *static_cast<Float64*>(outData) = fPlugin.getSampleRate();
 +                return noErr;
 +            }
-@@ -1267 +1280,2 @@ public:
+@@ -1260 +1273,2 @@ public:
 -            DISTRHO_SAFE_ASSERT_UINT_RETURN(inScope == kAudioUnitScope_Input || inScope == kAudioUnitScope_Output, inScope, kAudioUnitErr_InvalidScope);
 +            DISTRHO_SAFE_ASSERT_UINT_RETURN(inScope == kAudioUnitScope_Global || inScope == kAudioUnitScope_Input || inScope == kAudioUnitScope_Output,
 +                                            inScope, kAudioUnitErr_InvalidScope);
-@@ -1269 +1283,2 @@ public:
+@@ -1262 +1276,2 @@ public:
 -            DISTRHO_SAFE_ASSERT_UINT_RETURN(inScope == kAudioUnitScope_Output, inScope, kAudioUnitErr_InvalidScope);
 +            DISTRHO_SAFE_ASSERT_UINT_RETURN(inScope == kAudioUnitScope_Global || inScope == kAudioUnitScope_Output,
 +                                            inScope, kAudioUnitErr_InvalidScope);
-@@ -1271 +1286,2 @@ public:
+@@ -1264 +1279,2 @@ public:
 -            DISTRHO_SAFE_ASSERT_UINT_RETURN(inScope == kAudioUnitScope_Input, inScope, kAudioUnitErr_InvalidScope);
 +            DISTRHO_SAFE_ASSERT_UINT_RETURN(inScope == kAudioUnitScope_Global || inScope == kAudioUnitScope_Input,
 +                                            inScope, kAudioUnitErr_InvalidScope);
-@@ -1279,0 +1296,14 @@ public:
+@@ -1272,0 +1289,14 @@ public:
 +                if (inScope == kAudioUnitScope_Global)
 +                {
 +                   #if DISTRHO_PLUGIN_NUM_INPUTS != 0
@@ -47,40 +47,40 @@ index 919faa71..718e6456 100644
 +                    return noErr;
 +                }
 +
-@@ -1479 +1509,3 @@ public:
+@@ -1472 +1502,3 @@ public:
 -            DISTRHO_SAFE_ASSERT_UINT_RETURN(inScope == kAudioUnitScope_Input, inScope, kAudioUnitErr_InvalidScope);
 +            // REAPER uses the legacy global-scope alias for effect input callbacks.
 +            DISTRHO_SAFE_ASSERT_UINT_RETURN(inScope == kAudioUnitScope_Input || inScope == kAudioUnitScope_Global,
 +                                            inScope, kAudioUnitErr_InvalidScope);
-@@ -1977,0 +2010,8 @@ public:
+@@ -1970,0 +2003,8 @@ public:
 +           #if DISTRHO_PLUGIN_NUM_OUTPUTS != 0
 +            // The input callback is allowed to replace AudioBuffer::mData with
-+            // host-owned input storage. Preserve the output pointers before it
-+            // runs so processed audio still reaches the buffers supplied to us.
++            // host-owned input storage. Preserve the normalized output pointers
++            // before it runs so processed audio reaches the supplied buffers.
 +            for (uint16_t i = 0; i < numOutputs; ++i)
 +                outputs[i] = static_cast<float*>(ioData->mBuffers[i].mData);
 +           #endif
 +
-@@ -2019,6 +2058,0 @@ public:
+@@ -2012,6 +2051,0 @@ public:
 -
 -               #if DISTRHO_PLUGIN_NUM_OUTPUTS != 0
 -                for (uint16_t i = 0; i < numOutputs; ++i)
 -                    outputs[i] = static_cast<float*>(ioData->mBuffers[i].mData);
 -               #endif
 -
-@@ -2030,5 +2063,0 @@ public:
+@@ -2023,5 +2056,0 @@ public:
 -
 -               #if DISTRHO_PLUGIN_NUM_OUTPUTS != 0
 -                for (uint16_t i = 0; i < numOutputs; ++i)
 -                    outputs[i] = static_cast<float*>(ioData->mBuffers[i].mData);
 -               #endif
-@@ -2035,0 +2065,5 @@ public:
+@@ -2028,0 +2058,5 @@ public:
 +
 +           #if DISTRHO_PLUGIN_NUM_OUTPUTS != 0
 +            for (uint16_t i = 0; i < numOutputs; ++i)
 +                ioData->mBuffers[i].mData = outputs[i];
 +           #endif
-@@ -2458 +2492,2 @@ private:
+@@ -2451 +2485,2 @@ private:
 -            std::realloc(fAudioBufferList, sizeof(uint32_t) + sizeof(AudioBuffer) * numBuffers)))
 +            std::realloc(fAudioBufferList,
 +                         offsetof(AudioBufferList, mBuffers) + sizeof(AudioBuffer) * numBuffers)))
