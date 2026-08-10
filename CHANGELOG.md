@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## [0.4.0] - 2026-08-11
+
+- Redesigned the shared DGL/NanoVG editor with a skeuomorphic brushed-metal interface.
+- Replaced the Input Trim, True-Peak Ceiling, and Max Gain sliders with rotary controls.
+- Added 75%, 100%, 125%, and 150% UI scale presets.
+- Preserved parameter automation, mouse-wheel editing, live loudness readouts, and applied-gain history.
+- Changed the default editor size to 840 x 472 while retaining proportional resizing.
+
 ## [0.3.0] - 2026-08-03
 
 - Migrated LV2 and VST3 wrappers to the DISTRHO Plugin Framework.
