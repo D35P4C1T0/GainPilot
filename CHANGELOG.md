@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## [0.5.0] - 2026-09-03
+
+- Replaced the unbounded integrated-output correction with an anti-windup short-term output feedback servo and a 30-second leaky loudness supervisor.
+- Prevented controller precharge and abrupt gain restoration across silence, resets, and stereo/mono mode changes.
+- Restored the hidden high/low correction strengths, correction-curve modes, and meter-mode behavior retained for state compatibility.
+- Added an independent maximum-cut control while preserving all existing parameter IDs and loading serialized state versions 1–3.
+
 ## [0.4.0] - 2026-08-11
 
 - Redesigned the shared DGL/NanoVG editor with a skeuomorphic brushed-metal interface.
