@@ -38,6 +38,7 @@ const char* parameterUnit(const ParamId id) noexcept
         return "LUFS";
     case ParamId::truePeak:
     case ParamId::maxGain:
+    case ParamId::maxCut:
     case ParamId::inputTrim:
     case ParamId::gainReductionValue:
     case ParamId::appliedGainValue:

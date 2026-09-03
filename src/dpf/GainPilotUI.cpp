@@ -16,11 +16,12 @@ using gainpilot::ParamId;
 
 constexpr float kDesignWidth = 840.0f;
 constexpr float kDesignHeight = 472.0f;
-constexpr std::array<ParamId, 4> kSliderParameters{
+constexpr std::array<ParamId, 5> kSliderParameters{
     ParamId::targetLevel,
     ParamId::inputTrim,
     ParamId::truePeak,
     ParamId::maxGain,
+    ParamId::maxCut,
 };
 constexpr std::array<float, 4> kUiScales{0.75f, 1.0f, 1.25f, 1.5f};
 constexpr std::array<const char *, 4> kUiScaleLabels{"75%", "100%", "125%",
@@ -46,11 +47,13 @@ Bounds sliderBounds(const ParamId id) noexcept {
   case ParamId::targetLevel:
     return {67.0f, 207.0f, 218.0f, 25.0f};
   case ParamId::inputTrim:
-    return {333.0f, 319.0f, 143.0f, 112.0f};
+    return {327.0f, 319.0f, 112.0f, 112.0f};
   case ParamId::truePeak:
-    return {481.0f, 319.0f, 143.0f, 112.0f};
+    return {441.0f, 319.0f, 112.0f, 112.0f};
   case ParamId::maxGain:
-    return {629.0f, 319.0f, 143.0f, 112.0f};
+    return {555.0f, 319.0f, 112.0f, 112.0f};
+  case ParamId::maxCut:
+    return {669.0f, 319.0f, 112.0f, 112.0f};
   default:
     return {};
   }
@@ -69,7 +72,9 @@ const char *shortLabel(const ParamId id) noexcept {
   case ParamId::truePeak:
     return "TRUE-PEAK CEILING";
   case ParamId::maxGain:
-    return "MAX GAIN";
+    return "MAX BOOST";
+  case ParamId::maxCut:
+    return "MAX CUT";
   default:
     return "";
   }
@@ -351,8 +356,10 @@ private:
     drawSlider(ParamId::inputTrim);
     drawSlider(ParamId::truePeak);
     drawSlider(ParamId::maxGain);
-    drawVerticalDivider(478.0f, 326.0f, 425.0f);
-    drawVerticalDivider(626.0f, 326.0f, 425.0f);
+    drawSlider(ParamId::maxCut);
+    drawVerticalDivider(440.0f, 326.0f, 425.0f);
+    drawVerticalDivider(554.0f, 326.0f, 425.0f);
+    drawVerticalDivider(668.0f, 326.0f, 425.0f);
   }
 
   void drawPanel(const float x, const float y, const float width,
@@ -407,6 +414,8 @@ private:
     char valueBuffer[48]{};
     if (id == ParamId::targetLevel)
       std::snprintf(valueBuffer, sizeof(valueBuffer), "%.1f LUFS", value);
+    else if (id == ParamId::maxCut)
+      std::snprintf(valueBuffer, sizeof(valueBuffer), "-%.1f dB", value);
     else
       std::snprintf(valueBuffer, sizeof(valueBuffer), "%+.1f dB", value);
 

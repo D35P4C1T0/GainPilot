@@ -134,6 +134,37 @@ std::pair<std::vector<float>, std::vector<float>> processStereo(
   return {std::move(outLeft), std::move(outRight)};
 }
 
+float processConstantAndGetAppliedGain(gainpilot::ParameterState state,
+                                       float amplitude,
+                                       std::size_t frames) {
+  constexpr std::size_t kBlockSize = 256;
+  constexpr float kSampleRate = 48000.0f;
+  constexpr float kFrequency = 997.0f;
+  constexpr float kPi = 3.14159265358979323846f;
+  gainpilot::dsp::GainPilotProcessor processor;
+  processor.prepare(kSampleRate, 2, kBlockSize);
+  processor.setParameters(state);
+
+  std::array<std::vector<float>, 2> input{
+      std::vector<float>(kBlockSize), std::vector<float>(kBlockSize)};
+  std::array<std::vector<float>, 2> output{
+      std::vector<float>(kBlockSize), std::vector<float>(kBlockSize)};
+  for (std::size_t offset = 0; offset < frames; offset += kBlockSize) {
+    const std::size_t blockFrames = std::min(kBlockSize, frames - offset);
+    for (std::size_t frame = 0; frame < blockFrames; ++frame) {
+      const float sample = amplitude *
+                           std::sin(2.0f * kPi * kFrequency * static_cast<float>(offset + frame) /
+                                    kSampleRate);
+      input[0][frame] = sample;
+      input[1][frame] = sample;
+    }
+    const float* inputs[]{input[0].data(), input[1].data()};
+    float* outputs[]{output[0].data(), output[1].data()};
+    processor.process({inputs, outputs, 2, blockFrames});
+  }
+  return processor.currentAppliedGainDb();
+}
+
 }  // namespace
 
 int main() {
@@ -181,6 +212,7 @@ int main() {
   state.set(gainpilot::ParamId::meterMode, 2.0f);
   state.set(gainpilot::ParamId::meterReset, 1.0f);
   state.set(gainpilot::ParamId::meterValue, -12.0f);
+  state.set(gainpilot::ParamId::maxCut, 13.0f);
   state.set(gainpilot::ParamId::inputIntegratedValue, -18.0f);
   state.set(gainpilot::ParamId::outputIntegratedValue, -16.0f);
   state.set(gainpilot::ParamId::outputShortTermValue, -15.0f);
@@ -192,7 +224,8 @@ int main() {
     return 1;
   }
   if (restored->get(gainpilot::ParamId::inputTrim) != 3.0f ||
-      restored->get(gainpilot::ParamId::programMode) != 1.0f) {
+      restored->get(gainpilot::ParamId::programMode) != 1.0f ||
+      restored->get(gainpilot::ParamId::maxCut) != 13.0f) {
     std::cerr << "New control state did not survive serialization\n";
     return 1;
   }
@@ -221,6 +254,20 @@ int main() {
       legacyV2Restored->get(gainpilot::ParamId::channelMode) !=
           static_cast<float>(gainpilot::ChannelMode::stereo)) {
     std::cerr << "Legacy state does not safely default Channel Mode to stereo\n";
+    return 1;
+  }
+  auto legacyV3State = gainpilot::serializeState(state);
+  const std::uint32_t legacyVersion3 = 3;
+  const std::uint32_t legacyCount3 = 12;
+  std::memcpy(legacyV3State.data() + 4, &legacyVersion3, sizeof(legacyVersion3));
+  std::memcpy(legacyV3State.data() + 8, &legacyCount3, sizeof(legacyCount3));
+  legacyV3State.resize(12 + sizeof(float) * legacyCount3);
+  const auto legacyV3Restored = gainpilot::deserializeState(legacyV3State);
+  if (!legacyV3Restored ||
+      legacyV3Restored->get(gainpilot::ParamId::channelMode) !=
+          static_cast<float>(gainpilot::ChannelMode::mono) ||
+      legacyV3Restored->get(gainpilot::ParamId::maxCut) != 24.0f) {
+    std::cerr << "Version 3 state does not safely default the new Max Cut control\n";
     return 1;
   }
   if (restored->get(gainpilot::ParamId::meterMode) != 2.0f ||
@@ -332,6 +379,140 @@ int main() {
   }
   if (trimOnlyIntegrated - defaultIntegrated < 4.5f) {
     std::cerr << "Input Trim does not materially affect the signal path\n";
+    return 1;
+  }
+
+  gainpilot::ParameterState correctionState;
+  correctionState.set(gainpilot::ParamId::targetLevel, -20.0f);
+  correctionState.set(gainpilot::ParamId::inputLevel, -20.0f);
+  correctionState.set(gainpilot::ParamId::truePeak, 0.0f);
+  correctionState.set(gainpilot::ParamId::maxGain, 20.0f);
+  correctionState.set(gainpilot::ParamId::correctionHigh, 100.0f);
+  correctionState.set(gainpilot::ParamId::correctionLow, 100.0f);
+
+  auto noLowCorrectionState = correctionState;
+  noLowCorrectionState.set(gainpilot::ParamId::correctionLow, 0.0f);
+  const float lowCorrectionGain =
+      processConstantAndGetAppliedGain(correctionState, 0.02f, 48000 * 2);
+  const float noLowCorrectionGain =
+      processConstantAndGetAppliedGain(noLowCorrectionState, 0.02f, 48000 * 2);
+  if (lowCorrectionGain - noLowCorrectionGain < 3.0f) {
+    std::cerr << "Low-level correction control does not affect gain riding\n";
+    return 1;
+  }
+
+  auto noHighCorrectionState = correctionState;
+  noHighCorrectionState.set(gainpilot::ParamId::correctionHigh, 0.0f);
+  const float highCorrectionGain =
+      processConstantAndGetAppliedGain(correctionState, 0.2f, 48000 * 2);
+  const float noHighCorrectionGain =
+      processConstantAndGetAppliedGain(noHighCorrectionState, 0.2f, 48000 * 2);
+  if (noHighCorrectionGain - highCorrectionGain < 3.0f) {
+    std::cerr << "High-level correction control does not affect gain riding\n";
+    return 1;
+  }
+
+  auto linearLowCorrectionState = correctionState;
+  linearLowCorrectionState.set(gainpilot::ParamId::correctionLow, 50.0f);
+  linearLowCorrectionState.set(gainpilot::ParamId::corrMixMode, 0.0f);
+  auto logarithmicLowCorrectionState = linearLowCorrectionState;
+  logarithmicLowCorrectionState.set(gainpilot::ParamId::corrMixMode, 1.0f);
+  const float linearLowGain =
+      processConstantAndGetAppliedGain(linearLowCorrectionState, 0.02f, 48000 * 2);
+  const float logarithmicLowGain =
+      processConstantAndGetAppliedGain(logarithmicLowCorrectionState, 0.02f, 48000 * 2);
+  if (linearLowGain - logarithmicLowGain < 1.0f) {
+    std::cerr << "Correction curve mode does not affect low-level gain riding\n";
+    return 1;
+  }
+
+  gainpilot::ParameterState startupState;
+  startupState.set(gainpilot::ParamId::targetLevel, -16.0f);
+  startupState.set(gainpilot::ParamId::inputLevel, -23.0f);
+  startupState.set(gainpilot::ParamId::truePeak, 0.0f);
+  const float startupGain =
+      processConstantAndGetAppliedGain(startupState, 0.1f, 48000 * 4 / 10);
+  if (startupGain > 0.25f) {
+    std::cerr << "Controller precharges positive gain before loudness detection is ready\n";
+    return 1;
+  }
+
+  gainpilot::dsp::GainPilotProcessor transitionProcessor;
+  transitionProcessor.prepare(48000.0, 2, 4800);
+  transitionProcessor.setParameters(startupState);
+  std::array<std::vector<float>, 2> transitionInput{
+      std::vector<float>(4800), std::vector<float>(4800)};
+  std::array<std::vector<float>, 2> transitionOutput{
+      std::vector<float>(4800), std::vector<float>(4800)};
+  float maximumSettledTransitionGain = -100.0f;
+  for (std::size_t block = 0; block < 240; ++block) {
+    const float amplitude = block < 80 ? 0.1f : 0.025f;
+    for (std::size_t frame = 0; frame < 4800; ++frame) {
+      const std::size_t sampleIndex = block * 4800 + frame;
+      const float sample = amplitude *
+                           std::sin(2.0f * kPi * 997.0f * static_cast<float>(sampleIndex) / 48000.0f);
+      transitionInput[0][frame] = sample;
+      transitionInput[1][frame] = sample;
+    }
+    const float* transitionInputs[]{transitionInput[0].data(), transitionInput[1].data()};
+    float* transitionOutputs[]{transitionOutput[0].data(), transitionOutput[1].data()};
+    transitionProcessor.process({transitionInputs, transitionOutputs, 2, 4800});
+    if (block >= 130) {
+      maximumSettledTransitionGain =
+          std::max(maximumSettledTransitionGain, transitionProcessor.currentAppliedGainDb());
+    }
+  }
+  const float quietRequiredGain =
+      startupState.get(gainpilot::ParamId::targetLevel) - transitionProcessor.currentInputShortTermLufs();
+  if (maximumSettledTransitionGain > quietRequiredGain + 0.75f) {
+    std::cerr << "Output feedback winds up while feed-forward gain is settling\n";
+    return 1;
+  }
+  if (std::abs(transitionProcessor.currentOutputShortTermLufs() -
+               startupState.get(gainpilot::ParamId::targetLevel)) > 0.25f) {
+    std::cerr << "Output feedback does not converge to the short-term target\n";
+    return 1;
+  }
+
+  float singleInputLeft = 0.0f;
+  float singleInputRight = 0.0f;
+  float singleOutputLeft = 0.0f;
+  float singleOutputRight = 0.0f;
+  const float* singleInputs[]{&singleInputLeft, &singleInputRight};
+  float* singleOutputs[]{&singleOutputLeft, &singleOutputRight};
+  for (std::size_t frame = 0; frame < 48000; ++frame) {
+    transitionProcessor.process({singleInputs, singleOutputs, 2, 1});
+  }
+  if (transitionProcessor.currentAppliedGainDb() > 0.01f) {
+    std::cerr << "Silence does not reconcile positive hidden controller state\n";
+    return 1;
+  }
+  float previousGain = transitionProcessor.currentAppliedGainDb();
+  float maximumResumeGainStep = 0.0f;
+  for (std::size_t frame = 0; frame < 48000; ++frame) {
+    const float sample = 0.025f *
+                         std::sin(2.0f * kPi * 997.0f * static_cast<float>(frame) / 48000.0f);
+    singleInputLeft = sample;
+    singleInputRight = sample;
+    transitionProcessor.process({singleInputs, singleOutputs, 2, 1});
+    const float currentGain = transitionProcessor.currentAppliedGainDb();
+    maximumResumeGainStep = std::max(maximumResumeGainStep, std::abs(currentGain - previousGain));
+    previousGain = currentGain;
+  }
+  if (maximumResumeGainStep > 0.02f) {
+    std::cerr << "Controller restores hidden gain abruptly after silence\n";
+    return 1;
+  }
+
+  gainpilot::ParameterState forcedCutState;
+  forcedCutState.set(gainpilot::ParamId::maxGain, -10.0f);
+  forcedCutState.set(gainpilot::ParamId::maxCut, 0.0f);
+  forcedCutState.set(gainpilot::ParamId::correctionHigh, 0.0f);
+  forcedCutState.set(gainpilot::ParamId::correctionLow, 0.0f);
+  const float forcedCutGain =
+      processConstantAndGetAppliedGain(forcedCutState, 0.1f, 48000);
+  if (!std::isfinite(forcedCutGain) || std::abs(forcedCutGain + 10.0f) > 0.01f) {
+    std::cerr << "Independent boost and cut limits produce invalid gain bounds\n";
     return 1;
   }
 

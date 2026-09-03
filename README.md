@@ -27,7 +27,7 @@ DPF exports both variants as:
 - Linked stereo processing and a defined `0.5 * (L + R)` mono downmix
 - True-peak ceiling and lookahead limiting
 - Automatic and speech program modes
-- Input trim, maximum gain, and advanced correction controls
+- Input trim, independent maximum boost/cut, and advanced correction controls
 - Versioned cross-format parameter state
 - One resizable DGL/NanoVG editor across all plugin formats and platforms
 - Live applied-gain history and loudness readouts

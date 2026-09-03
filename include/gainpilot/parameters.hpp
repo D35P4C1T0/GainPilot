@@ -27,6 +27,7 @@ enum class ParamId : std::uint32_t {
   gainReductionValue,
   channelMode,
   appliedGainValue,
+  maxCut,
   count
 };
 
@@ -60,8 +61,8 @@ struct ParameterSpec {
 inline constexpr std::array kParameterSpecs{
     ParameterSpec{ParamId::targetLevel, "target_level", "Target Level", -30.0f, -10.0f, -16.0f, true, false},
     ParameterSpec{ParamId::truePeak, "true_peak", "True Peak", -10.0f, 0.0f, -1.0f, true, false},
-    ParameterSpec{ParamId::maxGain, "max_gain", "Max Gain", -10.0f, 30.0f, 30.0f, true, false},
-    ParameterSpec{ParamId::freezeLevel, "freeze_level", "Freeze Level", -70.0f, -10.0f, -50.0f, true, false},
+    ParameterSpec{ParamId::maxGain, "max_gain", "Max Boost", -10.0f, 30.0f, 30.0f, true, false},
+    ParameterSpec{ParamId::freezeLevel, "freeze_level", "Legacy Freeze", -70.0f, -10.0f, -50.0f, true, false},
     ParameterSpec{ParamId::inputLevel, "input_level", "Input Level", -40.0f, 0.0f, -23.0f, true, false},
     ParameterSpec{ParamId::correctionHigh, "correction_high", "Correction High", 0.0f, 100.0f, 100.0f, true, false},
     ParameterSpec{ParamId::correctionLow, "correction_low", "Correction Low", 0.0f, 100.0f, 100.0f, true, false},
@@ -74,9 +75,10 @@ inline constexpr std::array kParameterSpecs{
     ParameterSpec{ParamId::inputIntegratedValue, "input_integrated_value", "Input LUFS-I", -70.0f, 10.0f, -70.0f, false, true},
     ParameterSpec{ParamId::outputIntegratedValue, "output_integrated_value", "Output LUFS-I", -70.0f, 10.0f, -70.0f, false, true},
     ParameterSpec{ParamId::outputShortTermValue, "output_short_term_value", "Output Short-Term", -70.0f, 10.0f, -70.0f, false, true},
-    ParameterSpec{ParamId::gainReductionValue, "gain_reduction_value", "Gain Reduction", 0.0f, 24.0f, 0.0f, false, true},
+    ParameterSpec{ParamId::gainReductionValue, "gain_reduction_value", "Gain Reduction", 0.0f, 30.0f, 0.0f, false, true},
     ParameterSpec{ParamId::channelMode, "channel_mode", "Channel Mode", 0.0f, 1.0f, 0.0f, true, false},
-    ParameterSpec{ParamId::appliedGainValue, "applied_gain_value", "Applied Gain", -24.0f, 30.0f, 0.0f, false, true},
+    ParameterSpec{ParamId::appliedGainValue, "applied_gain_value", "Applied Gain", -30.0f, 30.0f, 0.0f, false, true},
+    ParameterSpec{ParamId::maxCut, "max_cut", "Max Cut", 0.0f, 30.0f, 24.0f, true, false},
 };
 
 inline constexpr std::size_t kNumParameters = kParameterSpecs.size();
