@@ -26,6 +26,8 @@ inline constexpr std::array kStateParamIds{
     ParamId::meterMode,
     ParamId::channelMode,
     ParamId::maxCut,
+    ParamId::referenceMode,
+    ParamId::lockedReference,
 };
 
 namespace detail {
@@ -97,7 +99,7 @@ inline std::vector<std::byte> serializeState(const ParameterState& state) {
     bytes.push_back(static_cast<std::byte>(value));
   }
 
-  const std::uint32_t version = 4;
+  const std::uint32_t version = 5;
   const std::uint32_t count = static_cast<std::uint32_t>(kStateParamIds.size());
   detail::appendBytes(bytes, version);
   detail::appendBytes(bytes, count);
@@ -158,7 +160,17 @@ inline std::optional<ParameterState> deserializeState(std::span<const std::byte>
     return state;
   }
 
-  if (version != 4 || count != kStateParamIds.size()) {
+  // V4 has the same prefix as V5, without explicit reference mode/value.
+  if (version == 4 && count == kStateParamIds.size() - 2) {
+    for (std::size_t i = 0; i < count; ++i) {
+      float value = 0.0f;
+      if (!detail::readBytes(data, offset, value)) return std::nullopt;
+      state.set(kStateParamIds[i], value);
+    }
+    return state;
+  }
+
+  if (version != 5 || count != kStateParamIds.size()) {
     return std::nullopt;
   }
 

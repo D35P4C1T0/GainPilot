@@ -1,0 +1,115 @@
+diff --git a/distrho/src/DistrhoPluginCLAP.cpp b/distrho/src/DistrhoPluginCLAP.cpp
+index 8a130d9a..554afa23 100644
+--- a/distrho/src/DistrhoPluginCLAP.cpp
++++ b/distrho/src/DistrhoPluginCLAP.cpp
+@@ -828,0 +829,9 @@ public:
++       #if DISTRHO_PLUGIN_WANT_LATENCY
++        // CLAP permits latency notifications only while activate() is running.
++        const uint32_t latency = fPlugin.getLatency();
++        const bool changed = fLastKnownLatency != latency;
++        fLastKnownLatency = latency;
++        fLatencyChanged = false;
++        if (changed && fHostExtensions.latency != nullptr)
++            fHostExtensions.latency->changed(fHost);
++       #endif
+@@ -834,4 +842,0 @@ public:
+-       #if DISTRHO_PLUGIN_WANT_LATENCY
+-        checkForLatencyChanges(false, true);
+-        reportLatencyChangeIfNeeded();
+-       #endif
+@@ -1123 +1128 @@ public:
+-        checkForLatencyChanges(true, false);
++        checkForLatencyChanges(true);
+@@ -1131,3 +1135,0 @@ public:
+-       #if DISTRHO_PLUGIN_WANT_LATENCY
+-        reportLatencyChangeIfNeeded();
+-       #endif
+@@ -1323 +1325 @@ public:
+-        checkForLatencyChanges(active, !active);
++        checkForLatencyChanges(active);
+@@ -1414 +1416,2 @@ public:
+-        return fPlugin.getLatency();
++        // Keep the negotiated latency stable until the host reactivates us.
++        return fLastKnownLatency;
+@@ -1417 +1420 @@ public:
+-    void checkForLatencyChanges(const bool isActive, const bool fromMainThread)
++    void checkForLatencyChanges(const bool isActive)
+@@ -1419,3 +1422 @@ public:
+-        const uint32_t latency = fPlugin.getLatency();
+-
+-        if (fLastKnownLatency == latency)
++        if (!isActive || fLatencyChanged || fLastKnownLatency == fPlugin.getLatency())
+@@ -1424,8 +1425,2 @@ public:
+-        fLastKnownLatency = latency;
+-
+-        if (fHostExtensions.latency == nullptr)
+-            return;
+-
+-        if (isActive)
+-        {
+-            fLatencyChanged = true;
++        fLatencyChanged = true;
++        if (fHostExtensions.latency != nullptr)
+@@ -1433,26 +1427,0 @@ public:
+-        }
+-        else
+-        {
+-            // if this is main-thread we can report latency change directly
+-            if (fromMainThread || (fHostExtensions.threadCheck != nullptr && fHostExtensions.threadCheck->is_main_thread(fHost)))
+-            {
+-                fLatencyChanged = false;
+-                fHostExtensions.latency->changed(fHost);
+-            }
+-            // otherwise we need to request a main-thread callback
+-            else
+-            {
+-                fLatencyChanged = true;
+-                fHost->request_callback(fHost);
+-            }
+-        }
+-    }
+-
+-    // called from main thread
+-    void reportLatencyChangeIfNeeded()
+-    {
+-        if (fLatencyChanged)
+-        {
+-            fLatencyChanged = false;
+-            fHostExtensions.latency->changed(fHost);
+-        }
+@@ -1574 +1542,0 @@ public:
+-        bool empty = true;
+@@ -1579,2 +1547 @@ public:
+-        char buffer[512], orig;
+-        buffer[sizeof(buffer)-1] = '\xff';
++        char buffer[512];
+@@ -1586,0 +1554 @@ public:
++            // A state is complete only after its explicit terminator.
+@@ -1588,3 +1556,2 @@ public:
+-                return !empty;
+-
+-            empty = false;
++                return false;
++            buffer[read] = '\0';
+@@ -1595,0 +1563,3 @@ public:
++                    if ((queryingType != 'n' && queryingType != 'x') ||
++                        key.isNotEmpty() || value.isNotEmpty() || !fillingKey)
++                        return false;
+@@ -1600,6 +1569,0 @@ public:
+-                // store character at read position
+-                orig = buffer[read];
+-
+-                // place null character to create valid string
+-                buffer[read] = '\0';
+-
+@@ -1620,3 +1583,0 @@ public:
+-                // restore read character
+-                buffer[read] = orig;
+-
+@@ -1624 +1585 @@ public:
+-                if (buffer[i] == '\0')
++                if (i < read && buffer[i] == '\0')
+@@ -1757,2 +1718 @@ public:
+-        checkForLatencyChanges(fPlugin.isActive(), true);
+-        reportLatencyChangeIfNeeded();
++        checkForLatencyChanges(fPlugin.isActive());

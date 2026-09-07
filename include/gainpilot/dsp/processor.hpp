@@ -22,6 +22,7 @@ class GainPilotProcessor {
 public:
   void prepare(double sampleRate, std::size_t channelCount, std::size_t maxBlockSize);
   void reset();
+  void requestMeterReset() { resetPending_ = true; }
   void setParameters(const ParameterState& state);
   void setOfflineMode(bool offlineMode);
   [[nodiscard]] std::size_t latencySamples() const;
@@ -31,6 +32,8 @@ public:
   [[nodiscard]] float currentAppliedGainDb() const;
   [[nodiscard]] float currentInputShortTermLufs() const;
   [[nodiscard]] float currentInputIntegratedLufs() const;
+  [[nodiscard]] float currentInputReferenceLufs() const;
+  [[nodiscard]] float meterResetCount() const { return static_cast<float>(meterResetCount_); }
   [[nodiscard]] float currentOutputIntegratedLufs() const;
   [[nodiscard]] float currentOutputShortTermLufs() const;
   [[nodiscard]] float currentGainReductionDb() const;
@@ -88,6 +91,8 @@ private:
   float currentLatencySamples_{0.0f};
   bool offlineMode_{false};
   bool resetWasHigh_{false};
+  bool resetPending_{false};
+  std::uint32_t meterResetCount_{0};
   bool autoHoldGateOpen_{false};
   bool outputSupervisorReady_{false};
   bool controlMonoMode_{false};

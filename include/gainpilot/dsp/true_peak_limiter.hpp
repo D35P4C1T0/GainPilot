@@ -2,7 +2,6 @@
 
 #include <array>
 #include <cstddef>
-#include <deque>
 #include <vector>
 
 namespace gainpilot::dsp {
@@ -35,9 +34,15 @@ private:
   float attackCoeff_{0.0f};
   float releaseCoeff_{0.0f};
   std::vector<std::vector<float>> delayLines_{};
-  std::vector<std::array<float, 4>> sampleHistory_{};
-  std::vector<std::size_t> sampleHistoryCount_{};
-  std::deque<GainSample> requiredGainWindow_{};
+  static constexpr std::size_t kFilterTaps = 128;
+  static constexpr std::size_t kPhases = 8;
+  std::array<std::array<float, kFilterTaps>, kPhases - 1> interpolation_{};
+  // Mirrored rings keep each FIR dot product contiguous.
+  std::vector<std::array<float, kFilterTaps * 2>> sampleHistory_{};
+  std::size_t historyWrite_{0};
+  std::vector<GainSample> requiredGainWindow_{};
+  std::size_t queueHead_{0};
+  std::size_t queueSize_{0};
 };
 
 }  // namespace gainpilot::dsp

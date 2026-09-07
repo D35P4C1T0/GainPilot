@@ -54,6 +54,8 @@ float clampToSpec(ParamId id, float value) {
 }
 
 float sanitizePlainValue(ParamId id, float value) {
+  if (!std::isfinite(value))
+    return parameterSpec(id).defaultValue;
   value = clampToSpec(id, value);
   if (id == ParamId::inputLevel && value >= parameterSpec(id).maxValue) {
     return std::nextafter(parameterSpec(id).maxValue, parameterSpec(id).minValue);
@@ -153,8 +155,9 @@ void GainPilotProcessor::prepare(double sampleRate, std::size_t channelCount, st
   speechMediumReleaseCoeff_ = makeCoeff(sampleRate_, 1.800f);
   speechSlowAttackCoeff_ = slowAttackCoeff_;
   speechSlowReleaseCoeff_ = slowReleaseCoeff_;
-  inputLevelAttackCoeff_ = makeCoeff(sampleRate_, 3.000f);
-  inputLevelReleaseCoeff_ = makeCoeff(sampleRate_, 12.000f);
+  const double controlHopSeconds = std::ceil(sampleRate_ * 0.1) / sampleRate_;
+  inputLevelAttackCoeff_ = static_cast<float>(std::exp(-controlHopSeconds / 3.0));
+  inputLevelReleaseCoeff_ = static_cast<float>(std::exp(-controlHopSeconds / 12.0));
   monoMixStep_ = 1.0f / std::max(1.0f, kModeCrossfadeSeconds * static_cast<float>(sampleRate_));
   autoHoldHops_ = kFreezeHoldHops;
   (void) maxBlockSize;
@@ -162,6 +165,7 @@ void GainPilotProcessor::prepare(double sampleRate, std::size_t channelCount, st
 }
 
 void GainPilotProcessor::reset() {
+  meterResetCount_ = (meterResetCount_ + 1) & 0xffffff;
   stereoInputMeter_.reset();
   monoInputMeter_.reset();
   stereoOutputMeter_.reset();
@@ -182,6 +186,7 @@ void GainPilotProcessor::reset() {
   currentMeterValue_ = -70.0f;
   currentLatencySamples_ = static_cast<float>(limiter_.latencySamples());
   resetWasHigh_ = false;
+  resetPending_ = false;
   autoHoldGateOpen_ = false;
   outputSupervisorReady_ = false;
   controlMonoMode_ = monoModeEnabled();
@@ -211,10 +216,16 @@ float GainPilotProcessor::minimumGainDb() const {
 }
 
 float GainPilotProcessor::effectiveInputLevelLufs() const {
+  if (parameters_.get(ParamId::referenceMode) >= 0.5f)
+    return parameters_.get(ParamId::lockedReference);
   if (inputMeter().integratedBlockCount() >= kInputLevelReadyBlocks) {
     return monoModeEnabled() ? learnedMonoInputLevelLufs_ : learnedStereoInputLevelLufs_;
   }
   return parameters_.get(ParamId::inputLevel);
+}
+
+float GainPilotProcessor::currentInputReferenceLufs() const {
+  return effectiveInputLevelLufs();
 }
 
 float GainPilotProcessor::freezeThresholdLufs() const {
@@ -267,7 +278,9 @@ float GainPilotProcessor::correctionMix(bool useHighBranch) const {
 
 void GainPilotProcessor::updateMeterResetLatch() {
   const bool resetHigh = parameters_.get(ParamId::meterReset) >= 0.5f;
-  if (resetHigh && !resetWasHigh_) {
+  if (resetPending_ || (resetHigh && !resetWasHigh_)) {
+    resetPending_ = false;
+    meterResetCount_ = (meterResetCount_ + 1) & 0xffffff;
     stereoInputMeter_.resetIntegrated();
     monoInputMeter_.resetIntegrated();
     stereoOutputMeter_.resetIntegrated();
@@ -350,13 +363,15 @@ void GainPilotProcessor::process(const ProcessBuffer& buffer) {
     const bool monoInputControlHop = monoInputMeter_.processFrame(monoInputFrame_.data());
     const bool inputControlHop = monoMode ? monoInputControlHop : stereoInputControlHop;
     if (!fixedGainOnly && inputControlHop) {
-      if (stereoInputMeter_.integratedBlockCount() >= kInputLevelReadyBlocks) {
+      if (parameters_.get(ParamId::referenceMode) < 0.5f &&
+          stereoInputMeter_.integratedBlockCount() >= kInputLevelReadyBlocks) {
         learnedStereoInputLevelLufs_ = smoothTowards(learnedStereoInputLevelLufs_,
                                                      stereoInputMeter_.integratedLufs(),
                                                      inputLevelAttackCoeff_,
                                                      inputLevelReleaseCoeff_);
       }
-      if (monoInputMeter_.integratedBlockCount() >= kInputLevelReadyBlocks) {
+      if (parameters_.get(ParamId::referenceMode) < 0.5f &&
+          monoInputMeter_.integratedBlockCount() >= kInputLevelReadyBlocks) {
         learnedMonoInputLevelLufs_ = smoothTowards(learnedMonoInputLevelLufs_,
                                                    monoInputMeter_.integratedLufs(),
                                                    inputLevelAttackCoeff_,

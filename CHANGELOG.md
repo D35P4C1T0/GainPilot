@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- Correct CLAP latency notifications and state loading across short stream reads; reject incomplete/unframed state.
+- Add mono/stereo CLAP host regressions and independent synthetic render-target probes.
+- Fix automatic input-learning coefficients to use the actual control-hop duration.
+- Replace cubic true-peak estimation with an 8-phase, 128-tap windowed-sinc detector and 0.3 dB safety margin.
+- Preallocate limiter queue storage; use a bounded integrated-loudness histogram and cached meter readouts.
+- Use BS.1770 filter coefficients and a shared internal meter on every platform; move libebur128 to independent tests.
+- Add explicit learn-and-lock controls, version-5 state migration, and factory/user presets.
+- Latch short Reset/Relearn pulses so GUI clicks survive until the next audio callback.
+- Add independent loudness/peak, learning, allocation, preset, and direct AU host regressions; enable Windows CI tests and optional pluginval checks.
+
+
 ## [0.5.0] - 2026-09-03
 
 - Replaced the unbounded integrated-output correction with an anti-windup short-term output feedback servo and a 30-second leaky loudness supervisor.

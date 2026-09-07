@@ -22,7 +22,8 @@ DPF exports both variants as:
 
 ## Features
 
-- Target-based loudness auto-leveling with learned input loudness
+- Target-based loudness auto-leveling with automatic following or a locked input reference
+- Explicit Learn Input / Stop & Lock capture and portable factory/user presets
 - BS.1770 / EBU-R128 integrated, short-term, and momentary metering
 - Linked stereo processing and a defined `0.5 * (L + R)` mono downmix
 - True-peak ceiling and lookahead limiting
@@ -56,8 +57,9 @@ sudo apt-get install build-essential cmake pkg-config \
   libgl1-mesa-dev libx11-dev libxcursor-dev libxext-dev libxrandr-dev
 ```
 
-`libebur128` is used when available; GainPilot retains its internal meter when
-it is not installed. DPF and its nested Pugl dependency are pinned as Git
+`libebur128` is an optional independent test reference. All plugin builds use
+the same bounded internal meter, including BS.1770 K-weighting and gated
+integrated measurement; the library is never called on the audio thread. DPF and its nested Pugl dependency are pinned as Git
 submodules. The Steinberg VST3 SDK, wxWidgets, GTK, and native LV2 SDK are no
 longer direct project dependencies.
 
@@ -105,8 +107,35 @@ Typical install locations under the selected prefix are:
 - `GAINPILOT_ENABLE_CLAP` — build CLAP plugins; default `ON`
 - `GAINPILOT_ENABLE_AU` — build Audio Unit components; default `ON` on macOS
 - `GAINPILOT_ENABLE_STANDALONE` — build DPF standalone applications; default `OFF`
-- `GAINPILOT_ENABLE_TESTS` — build DSP/state smoke tests; default `ON`
+- `GAINPILOT_ENABLE_TESTS` — build DSP, state, allocation, and host regression tests; default `ON`
+- `GAINPILOT_ENABLE_PLUGINS` — build plugin/UI targets; set `OFF` for DSP-only validation
+- `GAINPILOT_REFERENCE_TESTS` — compare against libebur128 when found; default `ON`
+- `GAINPILOT_PLUGINVAL` — optional path to pluginval for strictness-10 VST3 host tests
+- `GAINPILOT_CLAP_VALIDATOR` — optional path to the full external CLAP validator; see known transient-parameter failures in the validation notes. Dedicated CLAP host regressions run whenever CLAP and tests are enabled.
 - `GAINPILOT_DPF_PATH` — use another DPF checkout instead of `dpf/`
+
+## Learning and Presets
+
+The **Follow** button keeps learning the input reference automatically. For a
+repeatable source reference, press **Learn Input**, play the desired passage,
+and press **Stop & Lock**. Capture requires a fresh measurement after reset;
+silence and captures shorter than the 400 ms measurement window cannot lock.
+**Lock** outside capture freezes the current reference. A locked reference is
+saved with the session and survives resets and transport rewinds. It fixes the
+source reference; dynamic correction and output feedback continue to operate.
+
+Capture is an editor workflow, not saved session state. Closing the editor
+cancels the capture workflow; automatic following continues. A transport rewind
+starts fresh meter history. Changing channel interpretation can change the
+measured loudness, so learn the reference in the intended mono/stereo mode.
+
+The **Next Factory Preset** button applies the named preset and advances to the
+next choice. **Save** and **Load** use portable `.gainpilot` files containing
+versioned parameter state. Default, Speech -16 LUFS, and Gentle -18 LUFS provide
+starting settings; their sound still needs evaluation on your material.
+
+See [validation notes](docs/validation.md) for measured results, commands,
+compatibility changes, and remaining listening checks.
 
 ## Project Layout
 

@@ -7,6 +7,7 @@
 #include <cstdio>
 
 #include "gainpilot/parameters.hpp"
+#include "gainpilot/presets.hpp"
 
 START_NAMESPACE_DISTRHO
 
@@ -15,7 +16,7 @@ namespace {
 using gainpilot::ParamId;
 
 constexpr float kDesignWidth = 840.0f;
-constexpr float kDesignHeight = 472.0f;
+constexpr float kDesignHeight = 540.0f;
 constexpr std::array<ParamId, 5> kSliderParameters{
     ParamId::targetLevel,
     ParamId::inputTrim,
@@ -93,7 +94,7 @@ public:
           static_cast<float>(gainpilot::ChannelMode::mono);
 
     loadSharedResources();
-    setGeometryConstraints(630, 354, true);
+    setGeometryConstraints(630, 405, true);
   }
 
 protected:
@@ -102,6 +103,8 @@ protected:
       return;
 
     values_[index] = value;
+    if (capturing_ && index == paramIndex(ParamId::meterResetCount) && value != captureResetCount_)
+      captureAcknowledged_ = true;
     if (index == paramIndex(ParamId::appliedGainValue)) {
       history_[historyWrite_] = std::clamp(value, -15.0f, 15.0f);
       historyWrite_ = (historyWrite_ + 1) % history_.size();
@@ -122,6 +125,7 @@ protected:
     drawHeader();
     drawTargetCard();
     drawResponseCard();
+    drawWorkflow();
 
     restore();
   }
@@ -134,6 +138,7 @@ protected:
                     static_cast<float>(getWidth());
     const float y = static_cast<float>(event.pos.getY()) * kDesignHeight /
                     static_cast<float>(getHeight());
+
 
     if (!event.press) {
       if (activeSlider_ != ParamId::count) {
@@ -170,6 +175,54 @@ protected:
     for (std::size_t index = 0; index < kUiScales.size(); ++index) {
       if (scaleButtonBounds(index).contains(x, y))
         return setUiScale(index);
+    }
+
+    if (Bounds{67, 477, 74, 27}.contains(x, y)) {
+      capturing_ = false;
+      return setDiscreteParameter(ParamId::referenceMode, 0);
+    }
+    if (Bounds{147, 477, 90, 27}.contains(x, y)) {
+      capturing_ = true;
+      captureAcknowledged_ = false;
+      captureResetCount_ = values_[paramIndex(ParamId::meterResetCount)];
+      setDiscreteParameter(ParamId::referenceMode, 0);
+      resetPressed_ = true;
+      editParameter(paramIndex(ParamId::meterReset), true);
+      setParameterValue(paramIndex(ParamId::meterReset), 1);
+      status_ = "Play the passage, then Stop & Lock";
+      repaint();
+      return true;
+    }
+    if (Bounds{243, 477, 103, 27}.contains(x, y)) {
+      const float measured = values_[paramIndex(ParamId::inputIntegratedValue)];
+      if (measured <= -70 || (capturing_ && !captureAcknowledged_)) {
+        status_ = "Waiting for a fresh loudness measurement";
+        repaint();
+        return true;
+      }
+      const float reference = capturing_ ? measured : values_[paramIndex(ParamId::inputReferenceValue)];
+      setDiscreteParameter(ParamId::lockedReference, reference);
+      capturing_ = false;
+      status_ = "Reference locked; saved with the session";
+      return setDiscreteParameter(ParamId::referenceMode, 1);
+    }
+    if (Bounds{440, 477, 151, 27}.contains(x, y)) {
+      presetIndex_ = (presetIndex_ + 1) % gainpilot::kFactoryPresetNames.size();
+      applyPreset(gainpilot::factoryPreset(presetIndex_));
+      status_ = gainpilot::kFactoryPresetNames[presetIndex_];
+      return true;
+    }
+    if (Bounds{597, 477, 70, 27}.contains(x, y) || Bounds{673, 477, 70, 27}.contains(x, y)) {
+      savingPreset_ = x < 670;
+      FileBrowserOptions options;
+      options.saving = savingPreset_;
+      options.defaultName = "GainPilot.gainpilot";
+      options.title = savingPreset_ ? "Save GainPilot preset" : "Load GainPilot preset";
+      if (!openFileBrowser(options)) {
+        status_ = "Could not open file dialog";
+        repaint();
+      }
+      return true;
     }
 
     if (Bounds{342.0f, 96.0f, 82.0f, 33.0f}.contains(x, y))
@@ -233,19 +286,62 @@ protected:
     return false;
   }
 
+  void uiFileBrowserSelected(const char* filename) override {
+    if (filename == nullptr) return;
+    if (savingPreset_) {
+      gainpilot::ParameterState state;
+      for (const auto id : gainpilot::kStateParamIds)
+        state.set(id, values_[paramIndex(id)]);
+      status_ = gainpilot::savePreset(std::filesystem::u8path(filename), state)
+                    ? "Preset saved" : "Could not save preset";
+    } else if (const auto state = gainpilot::loadPreset(std::filesystem::u8path(filename))) {
+      applyPreset(*state);
+      status_ = "Preset loaded";
+    } else {
+      status_ = "Could not load a valid GainPilot preset";
+    }
+    repaint();
+  }
+
 private:
+  void applyPreset(const gainpilot::ParameterState& state) {
+    capturing_ = false;
+    for (const auto id : gainpilot::kStateParamIds) {
+      if constexpr (DISTRHO_PLUGIN_NUM_INPUTS == 1)
+        if (id == ParamId::channelMode) continue;
+      setDiscreteParameter(id, state.get(id));
+    }
+  }
+
+  void drawWorkflow() {
+    drawPanel(45, 452, 746, 66, 10);
+    char label[100]{};
+    std::snprintf(label, sizeof(label), "INPUT REFERENCE  %.1f LUFS%s",
+                  values_[paramIndex(ParamId::inputReferenceValue)], capturing_ ? "  / CAPTURING" : "");
+    drawText(67, 466, 9, label, 183, 183, 180, ALIGN_LEFT | ALIGN_MIDDLE);
+    drawModeButton({67, 477, 74, 27}, "FOLLOW", !capturing_ && values_[paramIndex(ParamId::referenceMode)] < .5f);
+    drawModeButton({147, 477, 90, 27}, "LEARN INPUT", capturing_);
+    drawModeButton({243, 477, 103, 27}, capturing_ ? "STOP & LOCK" : "LOCK", values_[paramIndex(ParamId::referenceMode)] >= .5f);
+    drawText(440, 466, 9, "NEXT FACTORY PRESET", 183, 183, 180, ALIGN_LEFT | ALIGN_MIDDLE);
+    drawModeButton({440, 477, 151, 27}, gainpilot::kFactoryPresetNames[(presetIndex_ + 1) % gainpilot::kFactoryPresetNames.size()], false);
+    drawModeButton({597, 477, 70, 27}, "SAVE", false);
+    drawModeButton({673, 477, 70, 27}, "LOAD", false);
+    if (!status_.empty())
+      drawText(420, 511, 9, status_.c_str(), 183, 183, 180, ALIGN_CENTER | ALIGN_MIDDLE);
+  }
+
   void drawChassis() {
     fillRect(0.0f, 0.0f, kDesignWidth, kDesignHeight, 6, 7, 7);
 
     // Layered edge creates thick, rounded, nickel-trimmed faceplate.
-    fillRounded(2.0f, 2.0f, 836.0f, 466.0f, 22.0f, 18, 20, 20);
-    strokeRounded(3.0f, 3.0f, 834.0f, 464.0f, 21.0f, 2.0f, 76, 79, 78);
-    strokeRounded(7.0f, 7.0f, 826.0f, 456.0f, 18.0f, 1.0f, 174, 174, 166);
-    strokeRounded(10.0f, 10.0f, 820.0f, 450.0f, 16.0f, 1.0f, 45, 47, 46);
-    fillRounded(13.0f, 13.0f, 814.0f, 444.0f, 14.0f, 20, 23, 24);
+    fillRounded(2.0f, 2.0f, 836.0f, 534.0f, 22.0f, 18, 20, 20);
+    strokeRounded(3.0f, 3.0f, 834.0f, 532.0f, 21.0f, 2.0f, 76, 79, 78);
+    strokeRounded(7.0f, 7.0f, 826.0f, 524.0f, 18.0f, 1.0f, 174, 174, 166);
+    strokeRounded(10.0f, 10.0f, 820.0f, 518.0f, 16.0f, 1.0f, 45, 47, 46);
+    fillRounded(13.0f, 13.0f, 814.0f, 512.0f, 14.0f, 20, 23, 24);
 
     // Fine horizontal bands suggest brushed black steel without bitmap assets.
-    for (int y = 15; y < 457; y += 3) {
+    for (int y = 15; y < 525; y += 3) {
       beginPath();
       moveTo(15.0f, static_cast<float>(y));
       lineTo(825.0f, static_cast<float>(y));
@@ -257,8 +353,8 @@ private:
 
     drawScrew(28.0f, 29.0f);
     drawScrew(812.0f, 29.0f);
-    drawScrew(28.0f, 443.0f);
-    drawScrew(812.0f, 443.0f);
+    drawScrew(28.0f, 511.0f);
+    drawScrew(812.0f, 511.0f);
   }
 
   void drawHeader() {
@@ -810,6 +906,12 @@ private:
   float dragStartValue_{0.0f};
   std::size_t uiScaleIndex_{1};
   bool resetPressed_{false};
+  bool capturing_{false};
+  bool captureAcknowledged_{false};
+  float captureResetCount_{0};
+  bool savingPreset_{false};
+  std::size_t presetIndex_{0};
+  std::string status_{};
 
   DISTRHO_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GainPilotDPFUI)
 };

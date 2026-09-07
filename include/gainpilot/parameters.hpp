@@ -28,6 +28,10 @@ enum class ParamId : std::uint32_t {
   channelMode,
   appliedGainValue,
   maxCut,
+  referenceMode,
+  lockedReference,
+  inputReferenceValue,
+  meterResetCount,
   count
 };
 
@@ -79,6 +83,10 @@ inline constexpr std::array kParameterSpecs{
     ParameterSpec{ParamId::channelMode, "channel_mode", "Channel Mode", 0.0f, 1.0f, 0.0f, true, false},
     ParameterSpec{ParamId::appliedGainValue, "applied_gain_value", "Applied Gain", -30.0f, 30.0f, 0.0f, false, true},
     ParameterSpec{ParamId::maxCut, "max_cut", "Max Cut", 0.0f, 30.0f, 24.0f, true, false},
+    ParameterSpec{ParamId::referenceMode, "reference_mode", "Input Reference Mode", 0.0f, 1.0f, 0.0f, true, false},
+    ParameterSpec{ParamId::lockedReference, "locked_reference", "Locked Input Reference", -70.0f, 10.0f, -23.0f, true, false},
+    ParameterSpec{ParamId::inputReferenceValue, "input_reference_value", "Input Reference", -70.0f, 10.0f, -23.0f, false, true},
+    ParameterSpec{ParamId::meterResetCount, "meter_reset_count", "Meter Reset Count", 0.0f, 16777215.0f, 0.0f, false, true},
 };
 
 inline constexpr std::size_t kNumParameters = kParameterSpecs.size();

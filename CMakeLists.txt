@@ -43,7 +43,11 @@ option(GAINPILOT_ENABLE_LV2 "Build DPF LV2 plugin targets" ${GAINPILOT_ENABLE_LV
 option(GAINPILOT_ENABLE_CLAP "Build DPF CLAP plugin targets" ON)
 option(GAINPILOT_ENABLE_AU "Build DPF Audio Unit plugin targets on macOS" ${GAINPILOT_ENABLE_AU_DEFAULT})
 option(GAINPILOT_ENABLE_STANDALONE "Build DPF standalone plugin targets" OFF)
-option(GAINPILOT_ENABLE_TESTS "Build local DSP and state smoke tests" ON)
+option(GAINPILOT_ENABLE_TESTS "Build DSP, state, and real-time regression tests" ON)
+option(GAINPILOT_ENABLE_PLUGINS "Build plugin bundles and their UI" ON)
+option(GAINPILOT_REFERENCE_TESTS "Validate against libebur128 when available" ON)
+set(GAINPILOT_PLUGINVAL "" CACHE FILEPATH "Optional pluginval executable for VST3 host tests")
+set(GAINPILOT_CLAP_VALIDATOR "" CACHE FILEPATH "Optional clap-validator executable for CLAP host tests")
 set(
   GAINPILOT_DPF_PATH
   "${CMAKE_CURRENT_SOURCE_DIR}/dpf"
@@ -74,10 +78,7 @@ target_compile_options(
     $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic>
 )
 
-if(TARGET PkgConfig::EBUR128)
-  target_link_libraries(gainpilot_core PUBLIC PkgConfig::EBUR128)
-  target_compile_definitions(gainpilot_core PUBLIC GAINPILOT_USE_LIBEBUR128=1)
-endif()
+if(GAINPILOT_ENABLE_PLUGINS)
 
 if(NOT EXISTS "${GAINPILOT_DPF_PATH}/CMakeLists.txt")
   message(
@@ -87,44 +88,15 @@ if(NOT EXISTS "${GAINPILOT_DPF_PATH}/CMakeLists.txt")
   )
 endif()
 
-if(APPLE AND GAINPILOT_ENABLE_AU)
+if(GAINPILOT_ENABLE_CLAP OR (APPLE AND GAINPILOT_ENABLE_AU))
   find_package(Git REQUIRED)
-  set(
-    GAINPILOT_DPF_AU_PATCH
-    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/dpf-au-host-buffer-routing.patch"
-  )
-  execute_process(
-    COMMAND
-      "${GIT_EXECUTABLE}" apply --unidiff-zero --check "${GAINPILOT_DPF_AU_PATCH}"
-    WORKING_DIRECTORY "${GAINPILOT_DPF_PATH}"
-    RESULT_VARIABLE GAINPILOT_DPF_PATCH_CAN_APPLY
-    OUTPUT_QUIET
-    ERROR_QUIET
-  )
-  if(GAINPILOT_DPF_PATCH_CAN_APPLY EQUAL 0)
-    execute_process(
-      COMMAND
-        "${GIT_EXECUTABLE}" apply --unidiff-zero "${GAINPILOT_DPF_AU_PATCH}"
-      WORKING_DIRECTORY "${GAINPILOT_DPF_PATH}"
-      COMMAND_ERROR_IS_FATAL ANY
-    )
-  else()
-    execute_process(
-      COMMAND
-        "${GIT_EXECUTABLE}" apply --unidiff-zero --reverse --check "${GAINPILOT_DPF_AU_PATCH}"
-      WORKING_DIRECTORY "${GAINPILOT_DPF_PATH}"
-      RESULT_VARIABLE GAINPILOT_DPF_PATCH_ALREADY_APPLIED
-      OUTPUT_QUIET
-      ERROR_QUIET
-    )
-    if(NOT GAINPILOT_DPF_PATCH_ALREADY_APPLIED EQUAL 0)
-      message(
-        FATAL_ERROR
-        "The GainPilot DPF Audio Unit compatibility patch does not apply cleanly "
-        "to ${GAINPILOT_DPF_PATH}."
-      )
-    endif()
-  endif()
+  include(cmake/ApplyDPFPatch.cmake)
+endif()
+if(APPLE AND GAINPILOT_ENABLE_AU)
+  gainpilot_apply_dpf_patch(dpf-au-host-buffer-routing.patch)
+endif()
+if(GAINPILOT_ENABLE_CLAP)
+  gainpilot_apply_dpf_patch(dpf-clap-host-compatibility.patch)
 endif()
 
 set(DPF_EXAMPLES OFF CACHE BOOL "" FORCE)
@@ -158,6 +130,7 @@ endif()
 function(gainpilot_add_dpf_plugin target info_directory bundle_identifier display_name)
   dpf_add_plugin(
     ${target}
+    USE_FILE_BROWSER
     TARGETS ${gainpilot_dpf_targets}
     FILES_DSP src/dpf/GainPilotPlugin.cpp
     FILES_UI src/dpf/GainPilotUI.cpp
@@ -308,11 +281,64 @@ if(GAINPILOT_ENABLE_AU)
   endforeach()
 endif()
 
+endif() # GAINPILOT_ENABLE_PLUGINS
+
 if(GAINPILOT_ENABLE_TESTS)
   enable_testing()
-  add_executable(gainpilot_smoke tests/smoke.cpp)
-  target_link_libraries(gainpilot_smoke PRIVATE gainpilot_core)
-  add_test(NAME gainpilot_smoke COMMAND gainpilot_smoke)
+  foreach(test_name smoke learning realtime peak presets)
+    add_executable(gainpilot_${test_name} tests/${test_name}.cpp)
+    target_link_libraries(gainpilot_${test_name} PRIVATE gainpilot_core)
+    add_test(NAME gainpilot_${test_name} COMMAND gainpilot_${test_name})
+  endforeach()
+  if(GAINPILOT_ENABLE_PLUGINS AND GAINPILOT_ENABLE_VST3 AND GAINPILOT_PLUGINVAL)
+    foreach(plugin_name GainPilot GainPilotMono)
+      add_test(NAME ${plugin_name}_pluginval COMMAND "${GAINPILOT_PLUGINVAL}"
+        --strictness-level 10 --random-seed 12345 --skip-gui-tests
+        --validate "${CMAKE_CURRENT_BINARY_DIR}/bin/${plugin_name}.vst3")
+    endforeach()
+  endif()
+  if(GAINPILOT_ENABLE_PLUGINS AND GAINPILOT_ENABLE_CLAP)
+    add_executable(gainpilot_clap_host tests/clap_host.cpp)
+    target_include_directories(gainpilot_clap_host PRIVATE include "${GAINPILOT_DPF_PATH}/distrho/src")
+    target_link_libraries(gainpilot_clap_host PRIVATE ${CMAKE_DL_LIBS})
+    add_dependencies(gainpilot_clap_host GainPilot-clap GainPilotMono-clap)
+    foreach(plugin_name GainPilot GainPilotMono)
+      if(plugin_name STREQUAL "GainPilotMono")
+        set(clap_channels 1)
+      else()
+        set(clap_channels 2)
+      endif()
+      add_test(NAME ${plugin_name}_clap_host COMMAND gainpilot_clap_host
+        "${CMAKE_CURRENT_BINARY_DIR}/bin/${plugin_name}.clap" ${clap_channels})
+    endforeach()
+  endif()
+  if(GAINPILOT_ENABLE_PLUGINS AND GAINPILOT_ENABLE_CLAP AND GAINPILOT_CLAP_VALIDATOR)
+    foreach(plugin_name GainPilot GainPilotMono)
+      add_test(NAME ${plugin_name}_clap_validator COMMAND "${GAINPILOT_CLAP_VALIDATOR}"
+        validate --jobs 2 "${CMAKE_CURRENT_BINARY_DIR}/bin/${plugin_name}.clap")
+    endforeach()
+  endif()
+  if(APPLE AND GAINPILOT_ENABLE_PLUGINS AND GAINPILOT_ENABLE_AU)
+    add_executable(gainpilot_au_host tests/au_host.cpp)
+    add_dependencies(gainpilot_au_host GainPilot-au GainPilotMono-au)
+    target_include_directories(gainpilot_au_host PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(gainpilot_au_host PRIVATE "-framework AudioToolbox" "-framework CoreFoundation")
+    add_test(NAME gainpilot_au_stereo COMMAND gainpilot_au_host "${CMAKE_CURRENT_BINARY_DIR}/bin/GainPilot.component" 2)
+    add_test(NAME gainpilot_au_mono COMMAND gainpilot_au_host "${CMAKE_CURRENT_BINARY_DIR}/bin/GainPilotMono.component" 1)
+  endif()
+  if(GAINPILOT_REFERENCE_TESTS AND TARGET PkgConfig::EBUR128)
+    add_executable(gainpilot_reference tests/reference.cpp)
+    target_link_libraries(gainpilot_reference PRIVATE gainpilot_core PkgConfig::EBUR128)
+    add_test(NAME gainpilot_reference COMMAND gainpilot_reference)
+    add_executable(gainpilot_render_target tests/render_target.cpp)
+    target_link_libraries(gainpilot_render_target PRIVATE gainpilot_core PkgConfig::EBUR128)
+    foreach(pattern RANGE 0 2)
+      add_test(NAME gainpilot_render_target_${pattern} COMMAND gainpilot_render_target 120 ${pattern} 0)
+    endforeach()
+    add_test(NAME gainpilot_render_target_speech COMMAND gainpilot_render_target 120 2 1)
+  elseif(GAINPILOT_REFERENCE_TESTS)
+    message(STATUS "libebur128 unavailable: independent reference test skipped")
+  endif()
 endif()
 
 set(CPACK_PACKAGE_NAME "GainPilot")

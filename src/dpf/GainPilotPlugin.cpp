@@ -1,6 +1,7 @@
 #include "DistrhoPlugin.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -33,6 +34,8 @@ const char* parameterUnit(const ParamId id) noexcept
     case ParamId::inputLevel:
     case ParamId::meterValue:
     case ParamId::inputIntegratedValue:
+    case ParamId::lockedReference:
+    case ParamId::inputReferenceValue:
     case ParamId::outputIntegratedValue:
     case ParamId::outputShortTermValue:
         return "LUFS";
@@ -177,9 +180,16 @@ protected:
 
         switch (id)
         {
+        case ParamId::meterResetCount:
+            parameter.hints |= kParameterIsHidden;
+            break;
         case ParamId::meterReset:
             parameter.hints = kParameterIsAutomatable | kParameterIsTrigger |
                               kParameterIsHidden;
+            break;
+        case ParamId::referenceMode:
+            parameter.hints |= kParameterIsInteger;
+            setEnumeration(parameter, {{0.0f, "Automatic follow"}, {1.0f, "Locked"}});
             break;
         case ParamId::programMode:
             parameter.hints |= kParameterIsInteger;
@@ -238,6 +248,10 @@ protected:
         {
         case ParamId::meterValue:
             return processor_.currentMeterValue();
+        case ParamId::inputReferenceValue:
+            return processor_.currentInputReferenceLufs();
+        case ParamId::meterResetCount:
+            return processor_.meterResetCount();
         case ParamId::inputIntegratedValue:
             return processor_.currentInputIntegratedLufs();
         case ParamId::outputIntegratedValue:
@@ -270,6 +284,8 @@ protected:
                 return;
             }
         }
+        if (id == ParamId::meterReset && value >= 0.5f)
+            resetRequested_.store(true, std::memory_order_relaxed);
         parameters_.set(id, value);
     }
 
@@ -300,19 +316,21 @@ protected:
 
     void activate() override
     {
-        processor_.reset();
         processor_.setParameters(parameters_);
+        processor_.reset();
         lastTransportFrame_.reset();
         setLatency(static_cast<std::uint32_t>(processor_.latencySamples()));
     }
 
     void run(const float** const inputs, float** const outputs, const std::uint32_t frames) override
     {
+        if (resetRequested_.exchange(false, std::memory_order_relaxed))
+            processor_.requestMeterReset();
         const TimePosition& position = getTimePosition();
         if (lastTransportFrame_ && position.frame < *lastTransportFrame_)
         {
-            processor_.reset();
             processor_.setParameters(parameters_);
+            processor_.reset();
         }
         lastTransportFrame_ = position.frame;
 
@@ -347,6 +365,7 @@ private:
         lastTransportFrame_.reset();
     }
 
+    std::atomic<bool> resetRequested_{false};
     ParameterState parameters_{};
     gainpilot::dsp::GainPilotProcessor processor_{};
     std::optional<std::uint64_t> lastTransportFrame_{};
