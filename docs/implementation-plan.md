@@ -6,9 +6,21 @@ for commands, measurements, design decisions, and limits.
 
 ## Implementation status
 
+- Broadcast ceiling follow-up: see [final-output measurements](broadcast-validation.md).
+  Reproduced transient/ceiling-automation failures fixed; strict independent peak
+  regressions added. Actual VST3 renders confirm close meter agreement but reveal
+  remaining content-dependent whole-file target errors. Orban validation remains.
+
 - Stages 1–3: implemented and regression-tested. Production metering is now shared across platforms; libebur128 is retained as an independent test oracle.
 - Stage 4: local DSP/sanitizer, VST3 pluginval, direct AU host, installed-build auval, and dedicated CLAP host checks pass. CLAP latency/short-read state fixes are installed; the full external CLAP validator retains documented transient-parameter failures. CI is updated; remote Windows/Linux runs and listening evaluation remain.
 - Stage 5: learn-and-lock, state migration, and factory/user presets implemented. Factory presets are starting settings pending listening evaluation.
+- September 10 Linux follow-up: dedicated LV2 host tests added for both variants,
+  three sample rates and three block sizes, including routing, latency,
+  automation, reset/rewind and state recreation. Independent metering now also
+  covers left-only and right-only stereo. Linux Release builds of LV2/VST3/CLAP
+  and all 14 local tests pass. LV2 host checks also pass for installed bundles
+  and under ASan/UBSan with leak checks. Build and release CI install the optional
+  Lilv test dependency. Remote CI and listening remain unverified.
 - Render follow-up: reported 25-minute -15 LUFS-I export at -14 target is not reproduced by three independent synthetic 25-minute probes; actual files/settings are needed.
 - Stage 6: optional controls and lower latency remain deferred until listening identifies a concrete need.
 - Mono/stereo AU, VST3, and CLAP builds installed in user plugin folders on September 7, 2026, at user request. Previous copies backed up to `/private/tmp/gainpilot-preinstall-1d3ixdp8`. Nothing published; unrelated DPF and test-results changes preserved.

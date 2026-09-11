@@ -8,11 +8,12 @@ namespace gainpilot::dsp {
 
 class TruePeakLimiter {
 public:
-  void prepare(double sampleRate, std::size_t channelCount, double latencySeconds = 0.020);
+  void prepare(double sampleRate, std::size_t channelCount,
+               double latencySeconds = 0.020);
   void reset();
   void setCeilingDb(float ceilingDb);
   [[nodiscard]] std::size_t latencySamples() const;
-  void processFrame(const float* input, float* output, float preGainLinear);
+  void processFrame(const float *input, float *output, float preGainLinear);
 
 private:
   struct GainSample {
@@ -31,12 +32,16 @@ private:
   std::size_t writeIndex_{0};
   float ceilingLinear_{1.0f};
   float envelopeGain_{1.0f};
-  float attackCoeff_{0.0f};
   float releaseCoeff_{0.0f};
   std::vector<std::vector<float>> delayLines_{};
   static constexpr std::size_t kFilterTaps = 128;
-  static constexpr std::size_t kPhases = 8;
+  static constexpr std::size_t kPhases = 16;
   std::array<std::array<float, kFilterTaps>, kPhases - 1> interpolation_{};
+  // Shorter reconstruction filters can ring higher on isolated transients
+  // than the long detector. Cover both common broadcast-meter supports.
+  std::array<std::array<float, 12>, kPhases - 1> shortInterpolation_{};
+  std::array<std::array<float, 24>, kPhases - 1> mediumInterpolation_{};
+  std::array<std::array<float, kFilterTaps>, kPhases> bandlimitedInterpolation_{};
   // Mirrored rings keep each FIR dot product contiguous.
   std::vector<std::array<float, kFilterTaps * 2>> sampleHistory_{};
   std::size_t historyWrite_{0};
@@ -45,4 +50,4 @@ private:
   std::size_t queueSize_{0};
 };
 
-}  // namespace gainpilot::dsp
+} // namespace gainpilot::dsp

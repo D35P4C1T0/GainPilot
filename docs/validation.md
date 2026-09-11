@@ -3,6 +3,11 @@
 Implementation based on the September 2026 comparison plan. These are measured
 engineering checks, not a standards certification or a listening assessment.
 
+The later [broadcast ceiling follow-up](broadcast-validation.md) supersedes the
+limiter detector description below and adds strict final-output tests and actual
+Linux VST3 audio renders. It also records remaining Auto-mode target errors on
+real material; synthetic convergence results do not establish whole-file accuracy.
+
 ## Design decisions and compatibility
 
 - Input-reference smoothing now uses the actual 100 ms control-hop duration.
@@ -33,7 +38,7 @@ engineering checks, not a standards certification or a listening assessment.
   and default to automatic following. Transient capture/measurement state is
   excluded from presets and session state.
 
-## Results on this machine
+## Original macOS results
 
 Clang Release build on macOS; libebur128 1.2.6 for independent comparisons.
 
@@ -73,6 +78,39 @@ The allocation test intercepts C++ new/delete in the DSP executable, not every
 possible operating-system allocation. The production DSP no longer depends on
 libebur128; its project-owned storage is allocated in prepare(). File operations
 run in the editor, outside the processing callback.
+
+## Linux follow-up, September 10, 2026
+
+GCC 16.2.1 Release build, libebur128 1.2.6 and Lilv 0.28.0:
+
+- Mono/stereo LV2, VST3 and CLAP bundles build; all 14 CTest cases pass.
+- New Lilv host tests load the explicitly supplied LV2 bundle and inspect its
+  generated port metadata. Both variants pass at 44.1/48/96 kHz with
+  1/127/1024-frame blocks: impulse routing, measured/reported latency, control
+  automation, Reset/Relearn, transport rewind, and plugin-blob plus control-port
+  state restore into a new instance. Saving with Reset held high does not replay
+  the trigger on restore. The locked reference survives reset and rewind.
+- The same host checks pass against the installed bundles in `~/.lv2`.
+- LV2 DSP modules and the host executable also pass AddressSanitizer,
+  UndefinedBehaviorSanitizer and leak checks. These checks required execution
+  outside the sandbox because LeakSanitizer cannot work under its tracing.
+- Independent metering comparisons now include left-only and right-only stereo,
+  alongside mono and duplicated stereo. Maximum observed difference remains
+  0.00000222 LU; maximum reference peak remains -1.25981 dBTP at a -1 dBTP ceiling.
+
+Linux build and release workflows install `liblilv-dev` so LV2 host tests run
+automatically. Local builds without Lilv explicitly report the skipped checks.
+This follow-up did not run remote CI, audition audio, exercise LV2 editor/worker
+messages, or run an external VST3 validator on Linux. No DSP tuning was needed.
+The all-format build applied the existing project-owned CLAP patch to DPF.
+
+To reproduce the LV2 checks after building:
+
+```sh
+ctest --test-dir build-plan -L LV2 --output-on-failure
+./build-plan/gainpilot_lv2_host "$HOME/.lv2/GainPilot.lv2" 2
+./build-plan/gainpilot_lv2_host "$HOME/.lv2/GainPilotMono.lv2" 1
+```
 
 ## CLAP follow-up
 
@@ -161,8 +199,9 @@ prevent this process-local registration; run these host tests in a normal shell.
   Synthetic passing cases do not establish compliance for every input.
 - Run the updated Windows/Linux CI jobs; they were configured, not executed
   remotely in this session.
-- Dedicated LV2 host validation and resolution of the external CLAP validator
-  limitations above. The new dedicated CLAP host tests run in plugin CI builds.
+- LV2 editor/worker interaction checks and resolution of the external CLAP
+  validator limitations above. Dedicated LV2 and CLAP DSP host tests now run in
+  Linux plugin CI builds.
 - Reproduce the reported -15 versus -14 LUFS-I render using the actual audio
   and settings before changing controller behavior.
 - Stage 6's optional response controls, dialogue-specific detector gating,

@@ -27,7 +27,7 @@ int main() {
       }
       const double db = 20 * std::log10(peak);
       worstDb = std::max(worstDb, db);
-      if (db > -.9 || db < -1.7) {
+      if (db > -1.0 || db < -1.7) {
         std::cerr << "Analytic true peak " << db << " dBTP at " << rate << '\n';
         return 1;
       }

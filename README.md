@@ -63,6 +63,17 @@ integrated measurement; the library is never called on the audio thread. DPF and
 submodules. The Steinberg VST3 SDK, wxWidgets, GTK, and native LV2 SDK are no
 longer direct project dependencies.
 
+Optional `liblilv-dev` enables dedicated LV2 host regression tests when LV2 and
+tests are enabled. These load the built bundles directly and check mono/stereo
+routing, latency, control automation, transport reset, and state restore.
+It is a test dependency only; CMake reports when these tests are skipped.
+
+`libsoxr-dev` adds independent 16x final-output peak reconstruction to the
+ceiling regressions. `libsndfile1-dev`, together with libebur128, enables the
+Linux `gainpilot_vst3_render` validation tool for rendering real audio through
+the actual VST3 module. See [broadcast validation](docs/broadcast-validation.md)
+for results, commands, and remaining target-convergence limitations.
+
 ## Quick Start
 
 Clone with submodules:

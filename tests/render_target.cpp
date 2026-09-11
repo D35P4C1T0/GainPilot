@@ -60,5 +60,6 @@ int main(int argc, char** argv) {
             << " output=" << integrated << " LUFS-I peak=" << 20 * std::log10(peak)
             << " dBTP internal=" << processor.currentOutputIntegratedLufs() << '\n';
   return measured && std::isfinite(integrated) && std::abs(integrated + 14) <= .5 &&
+         peak <= std::pow(10.0, -1.0 / 20.0) &&
          std::abs(integrated - processor.currentOutputIntegratedLufs()) <= .05 ? 0 : 1;
 }

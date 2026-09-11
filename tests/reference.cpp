@@ -20,7 +20,9 @@ int main() {
   constexpr double pi = 3.14159265358979323846;
   double worstLufs = 0, worstPeakDb = -100;
   for (unsigned long rate : {44100UL, 48000UL, 96000UL}) {
-    for (unsigned channels : {1U, 2U}) {
+    // Mono, duplicated stereo, left-only stereo, and right-only stereo.
+    for (unsigned layout : {0U, 1U, 2U, 3U}) {
+      const unsigned channels = layout == 0 ? 1 : 2;
       for (double frequency : {60.0, 1000.0, 10000.0}) {
         gainpilot::dsp::LoudnessMeter meter;
         meter.prepare(rate, channels);
@@ -31,6 +33,8 @@ int main() {
           const double amplitude = section == 1 ? .00001 : (section == 2 ? 0 : (section == 3 ? .015 : .2));
           float frame[]{static_cast<float>(amplitude * std::sin(2 * pi * frequency * n / rate)), 0};
           frame[1] = frame[0];
+          if (layout == 2) frame[1] = 0;
+          if (layout == 3) frame[0] = 0;
           const bool hop = meter.processFrame(frame);
           ebur128_add_frames_float(reference.state, frame, 1);
           if (hop && n >= rate * 3) {
@@ -45,7 +49,7 @@ int main() {
               worstLufs = std::max(worstLufs, error);
               if (error > .05) {
                 std::cerr << "Meter mismatch " << error << " LU: rate=" << rate
-                          << " channels=" << channels << " frequency=" << frequency
+                          << " channels=" << channels << " layout=" << layout << " frequency=" << frequency
                           << " mode=" << i << " sample=" << n << '\n';
                 return 1;
               }
@@ -73,7 +77,7 @@ int main() {
         if (ebur128_true_peak(reference.state, 0, &peak)) return 1;
         const double db = 20 * std::log10(peak);
         worstPeakDb = std::max(worstPeakDb, db);
-        if (db > -.9) {
+        if (db > -1.0) {
           std::cerr << "Reference true peak " << db << " dBTP: rate=" << rate
                     << " frequency/fs=" << frequency << " shape=" << shape << '\n';
           return 1;

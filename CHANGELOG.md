@@ -2,12 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## [0.5.1] - 2026-09-11
+
+- Fix reproduced true-peak overshoots using 16-phase, multiple-support reconstruction guards and immediate safety attenuation; retain the 0.3 dB reserve and existing latency.
+- Enforce strict peak ceilings in final-output regressions, including independent libebur128 and SoX reconstruction, short bursts, clipped material, and ceiling automation.
+- Add LV2 host regressions, single-sided stereo meter checks, and a Linux VST3 file-render validation tool; enable their optional dependencies in Linux CI.
+- Document actual speech, music, percussion and clipped-material renders: meter agreement is close, but Auto mode still has content-dependent whole-file loudness target errors. Orban validation remains outstanding.
 
 - Correct CLAP latency notifications and state loading across short stream reads; reject incomplete/unframed state.
 - Add mono/stereo CLAP host regressions and independent synthetic render-target probes.
 - Fix automatic input-learning coefficients to use the actual control-hop duration.
-- Replace cubic true-peak estimation with an 8-phase, 128-tap windowed-sinc detector and 0.3 dB safety margin.
+- Replace cubic true-peak estimation with windowed-sinc reconstruction and independent final-output validation.
 - Preallocate limiter queue storage; use a bounded integrated-loudness histogram and cached meter readouts.
 - Use BS.1770 filter coefficients and a shared internal meter on every platform; move libebur128 to independent tests.
 - Add explicit learn-and-lock controls, version-5 state migration, and factory/user presets.
