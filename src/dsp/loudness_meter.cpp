@@ -15,8 +15,7 @@ void LoudnessMeter::prepare(double sampleRate, std::size_t channelCount) {
   momentarySamples_ = std::max<std::size_t>(1, static_cast<std::size_t>(std::ceil(sampleRate * 0.4)));
   shortTermSamples_ = std::max<std::size_t>(1, static_cast<std::size_t>(std::ceil(sampleRate * 3.0)));
   hopSamples_ = std::max<std::size_t>(1, static_cast<std::size_t>(std::ceil(sampleRate * 0.1)));
-  momentaryWindow_.assign(momentarySamples_, 0.0);
-  shortTermWindow_.assign(shortTermSamples_, 0.0);
+  energyWindow_.assign(shortTermSamples_, 0.0);
   integratedHistogram_.resize(kHistogramBins);
   weightingFilter_.prepare(sampleRate, channelCount_);
   reset();
@@ -24,11 +23,10 @@ void LoudnessMeter::prepare(double sampleRate, std::size_t channelCount) {
 
 void LoudnessMeter::reset() {
   weightingFilter_.reset();
-  momentaryIndex_ = shortTermIndex_ = sampleCounter_ = 0;
+  shortTermIndex_ = sampleCounter_ = 0;
   momentaryEnergySum_ = shortTermEnergySum_ = 0.0;
   momentaryLufs_ = shortTermLufs_ = controlLufs_ = -70.0f;
-  std::fill(momentaryWindow_.begin(), momentaryWindow_.end(), 0.0);
-  std::fill(shortTermWindow_.begin(), shortTermWindow_.end(), 0.0);
+  std::fill(energyWindow_.begin(), energyWindow_.end(), 0.0);
   resetIntegrated();
 }
 
@@ -39,21 +37,20 @@ void LoudnessMeter::resetIntegrated() {
   integratedLufs_ = -70.0f;
 }
 
-void LoudnessMeter::pushWindowSample(std::vector<double>& window,
-                                    std::size_t& index, double sample, double& runningSum) {
-  runningSum += sample - window[index];
-  window[index] = sample;
-  index = (index + 1) % window.size();
-}
-
 bool LoudnessMeter::processFrame(const float* frame) {
   double weightedEnergy = 0.0;
   for (std::size_t channel = 0; channel < channelCount_; ++channel) {
     const float weighted = weightingFilter_.processSample(channel, frame[channel]);
     weightedEnergy += static_cast<double>(weighted) * weighted;
   }
-  pushWindowSample(momentaryWindow_, momentaryIndex_, weightedEnergy, momentaryEnergySum_);
-  pushWindowSample(shortTermWindow_, shortTermIndex_, weightedEnergy, shortTermEnergySum_);
+  const std::size_t momentaryIndex = shortTermIndex_ >= momentarySamples_
+      ? shortTermIndex_ - momentarySamples_
+      : shortTermIndex_ + shortTermSamples_ - momentarySamples_;
+  const double oldMomentary = sampleCounter_ >= momentarySamples_ ? energyWindow_[momentaryIndex] : 0.0;
+  momentaryEnergySum_ += weightedEnergy - oldMomentary;
+  shortTermEnergySum_ += weightedEnergy - energyWindow_[shortTermIndex_];
+  energyWindow_[shortTermIndex_] = weightedEnergy;
+  if (++shortTermIndex_ == shortTermSamples_) shortTermIndex_ = 0;
   ++sampleCounter_;
   ++integratedSampleCounter_;
   if (sampleCounter_ % hopSamples_ != 0)
