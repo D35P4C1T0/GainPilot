@@ -111,12 +111,10 @@ std::pair<std::vector<float>, std::vector<float>> processStereo(
     gainpilot::ParameterState state,
     const std::vector<float>& inLeft,
     const std::vector<float>& inRight,
-    std::size_t blockSize,
-    bool offline) {
+    std::size_t blockSize) {
   gainpilot::dsp::GainPilotProcessor processor;
   processor.prepare(48000.0, 2, blockSize);
   processor.setParameters(state);
-  processor.setOfflineMode(offline);
 
   std::vector<float> outLeft(inLeft.size(), 0.0f);
   std::vector<float> outRight(inRight.size(), 0.0f);
@@ -723,11 +721,11 @@ int main() {
   consistencyState.set(gainpilot::ParamId::correctionLow, 0.0f);
 
   const auto realtime64 =
-      processStereo(consistencyState, consistencyLeft, consistencyRight, 64, false);
+      processStereo(consistencyState, consistencyLeft, consistencyRight, 64);
   const auto realtime511 =
-      processStereo(consistencyState, consistencyLeft, consistencyRight, 511, false);
-  const auto offline257 =
-      processStereo(consistencyState, consistencyLeft, consistencyRight, 257, true);
+      processStereo(consistencyState, consistencyLeft, consistencyRight, 511);
+  const auto realtime257 =
+      processStereo(consistencyState, consistencyLeft, consistencyRight, 257);
   float maxRenderDifference = 0.0f;
   float maxLinkError = 0.0f;
   for (std::size_t i = 0; i < kConsistencyFrames; ++i) {
@@ -736,14 +734,14 @@ int main() {
     maxRenderDifference =
         std::max(maxRenderDifference, std::abs(realtime64.second[i] - realtime511.second[i]));
     maxRenderDifference =
-        std::max(maxRenderDifference, std::abs(realtime64.first[i] - offline257.first[i]));
+        std::max(maxRenderDifference, std::abs(realtime64.first[i] - realtime257.first[i]));
     maxRenderDifference =
-        std::max(maxRenderDifference, std::abs(realtime64.second[i] - offline257.second[i]));
+        std::max(maxRenderDifference, std::abs(realtime64.second[i] - realtime257.second[i]));
     maxLinkError =
         std::max(maxLinkError, std::abs(realtime64.second[i] + 0.4f * realtime64.first[i]));
   }
   if (maxRenderDifference > 1.0e-6f) {
-    std::cerr << "Rendering changes with buffer size or offline mode\n";
+    std::cerr << "Rendering changes with buffer size\n";
     return 1;
   }
   if (maxLinkError > 1.0e-5f) {
