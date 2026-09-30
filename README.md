@@ -40,9 +40,12 @@ DPF exports both variants as:
 ![GainPilot plugin UI](docs/assets/gainpilot-ui.png)
 
 Dark flat editor with a target dial, 60-second applied-gain graph, and input
-trim, true-peak ceiling, and maximum gain knobs. Drag the dial or knobs vertically,
-use the target slider, or scroll over a control to adjust it. The scale selector
-supports 75%, 100%, 125%, and 150%, including high-DPI displays.
+trim, true-peak ceiling, and maximum gain knobs. Drag the dials vertically or
+scroll over a control to adjust it. Double-click a dial to restore its default.
+Hover over Auto or Speech for a brief explanation of the mode. Reset restores
+parameter defaults, clears the gain graph, and starts learning input loudness
+again. The scale selector supports 75%, 100%, 125%, and 150%, including high-DPI
+displays.
 
 The gear opens input-reference learning, maximum cut, presets, and loudness
 readouts. Close settings with the gear, the close button, or Escape. The dedicated

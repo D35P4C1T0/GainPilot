@@ -19,7 +19,7 @@ using gainpilot::ParamId;
 
 constexpr float kDesignWidth = 960.0f;
 constexpr float kDesignHeight = 544.0f;
-constexpr std::array<ParamId, 5> kSliderParameters{
+constexpr std::array<ParamId, 5> kDialParameters{
     ParamId::targetLevel,
     ParamId::inputTrim,
     ParamId::truePeak,
@@ -45,13 +45,12 @@ struct Bounds {
   }
 };
 
-constexpr Bounds kTargetTrack{50, 370, 140, 22};
 constexpr Bounds kTargetDial{40, 104, 264, 252};
 constexpr Bounds kSettings{347, 78, 598, 365};
 
-Bounds sliderBounds(const ParamId id) noexcept {
+Bounds dialBounds(const ParamId id) noexcept {
   switch (id) {
-  case ParamId::targetLevel: return kTargetTrack;
+  case ParamId::targetLevel: return kTargetDial;
   case ParamId::inputTrim: return {382, 325, 102, 117};
   case ParamId::truePeak: return {587, 325, 102, 117};
   case ParamId::maxGain: return {790, 325, 102, 117};
@@ -103,8 +102,12 @@ protected:
       return;
 
     values_[index] = value;
-    if (capturing_ && index == paramIndex(ParamId::meterResetCount) && value != captureResetCount_)
-      captureAcknowledged_ = true;
+    if (index == paramIndex(ParamId::meterResetCount)) {
+      if (capturing_ && value != captureResetCount_)
+        captureAcknowledged_ = true;
+      if (resetPending_ && value != resetCountBefore_)
+        resetAcknowledged_ = true;
+    }
     repaint();
   }
 
@@ -112,6 +115,7 @@ protected:
   // steady_clock measures editor wall time, including stopped playback. Missed
   // callbacks remain timestamped gaps instead of inventing past gain samples.
   void uiIdle() override {
+    finishMeterReset();
     historyNow_ = std::chrono::duration<double>(
         std::chrono::steady_clock::now().time_since_epoch()).count();
     if (history_.sample(historyNow_, values_[paramIndex(ParamId::appliedGainValue)]))
@@ -139,6 +143,7 @@ protected:
     else
       drawResponseCard();
     drawWorkflow();
+    drawModeTooltip();
 
     restore();
   }
@@ -153,41 +158,43 @@ protected:
                     static_cast<float>(getHeight());
 
     if (!event.press) {
-      if (activeSlider_ != ParamId::count) {
-        editParameter(paramIndex(activeSlider_), false);
-        activeSlider_ = ParamId::count;
+      if (activeDial_ != ParamId::count) {
+        editParameter(paramIndex(activeDial_), false);
+        activeDial_ = ParamId::count;
         return true;
       }
       if (resetPressed_) {
-        setParameterValue(paramIndex(ParamId::meterReset), 0.0f);
-        editParameter(paramIndex(ParamId::meterReset), false);
         resetPressed_ = false;
+        finishMeterReset();
         repaint();
         return true;
       }
       return false;
     }
 
-    for (const ParamId id : kSliderParameters) {
-      if ((id == ParamId::maxCut) != settingsOpen_ && id != ParamId::targetLevel)
-        continue;
-      const Bounds bounds = sliderBounds(id);
-      const bool targetDial = id == ParamId::targetLevel &&
-          (kTargetDial.contains(x, y) || Bounds{221, 365, 65, 33}.contains(x, y));
-      if (!bounds.contains(x, y) && !targetDial)
-        continue;
+    tooltipMode_ = -1;
+    repaint();
+    for (const ParamId id : kDialParameters) {
+      if (!dialVisible(id) || !dialBounds(id).contains(x, y)) continue;
 
-      activeSlider_ = id;
+      // DPF supplies millisecond timestamps, independently of audio playback.
+      const bool doubleClick = id == lastClickedDial_ && event.time != 0 &&
+          lastClickTime_ != 0 && event.time - lastClickTime_ <= 500 &&
+          std::abs(x - lastClickX_) <= 5 && std::abs(y - lastClickY_) <= 5;
+      lastClickedDial_ = doubleClick ? ParamId::count : id;
+      lastClickTime_ = event.time;
+      lastClickX_ = x;
+      lastClickY_ = y;
+      if (doubleClick)
+        return setDiscreteParameter(id, gainpilot::parameterSpec(id).defaultValue);
+
+      activeDial_ = id;
       editParameter(paramIndex(id), true);
-      targetTrackDrag_ = id == ParamId::targetLevel && !targetDial;
-      if (targetTrackDrag_) {
-        updateSliderFromX(id, x);
-      } else {
-        dragStartY_ = y;
-        dragStartValue_ = values_[paramIndex(id)];
-      }
+      dragStartY_ = y;
+      dragStartValue_ = values_[paramIndex(id)];
       return true;
     }
+    lastClickedDial_ = ParamId::count;
 
     for (std::size_t index = 0; index < kUiScales.size(); ++index) {
       if (scaleButtonBounds(index).contains(x, y))
@@ -210,9 +217,7 @@ protected:
       captureAcknowledged_ = false;
       captureResetCount_ = values_[paramIndex(ParamId::meterResetCount)];
       setDiscreteParameter(ParamId::referenceMode, 0);
-      resetPressed_ = true;
-      editParameter(paramIndex(ParamId::meterReset), true);
-      setParameterValue(paramIndex(ParamId::meterReset), 1);
+      startMeterReset();
       status_ = "Play the passage, then Stop & Lock";
       repaint();
       return true;
@@ -259,9 +264,13 @@ protected:
       return setDiscreteParameter(ParamId::channelMode, 1.0f);
 
     if (Bounds{823, 482, 120, 40}.contains(x, y)) {
-      resetPressed_ = true;
-      editParameter(paramIndex(ParamId::meterReset), true);
-      setParameterValue(paramIndex(ParamId::meterReset), 1.0f);
+      applyPreset(gainpilot::ParameterState{});
+      captureAcknowledged_ = false;
+      history_ = gainpilot::ui::GainHistory{};
+      values_[paramIndex(ParamId::appliedGainValue)] = 0;
+      presetIndex_ = 0;
+      status_ = "Defaults restored; relearning input loudness";
+      startMeterReset();
       repaint();
       return true;
     }
@@ -270,19 +279,34 @@ protected:
   }
 
   bool onMotion(const MotionEvent &event) override {
-    if (activeSlider_ == ParamId::count)
-      return false;
-
-    const float x = static_cast<float>(event.pos.getX()) * kDesignWidth /
-                    static_cast<float>(getWidth());
-    if (targetTrackDrag_) {
-      updateSliderFromX(activeSlider_, x);
-    } else {
-      const float y = static_cast<float>(event.pos.getY()) * kDesignHeight /
-                      static_cast<float>(getHeight());
-      updateKnobFromY(activeSlider_, y);
+    const float x = static_cast<float>(event.pos.getX()) * kDesignWidth / getWidth();
+    const float y = static_cast<float>(event.pos.getY()) * kDesignHeight / getHeight();
+    if (activeDial_ != ParamId::count) {
+      if (std::abs(x - lastClickX_) > 5 || std::abs(y - lastClickY_) > 5)
+        lastClickedDial_ = ParamId::count;
+      updateKnobFromY(activeDial_, y);
+      return true;
     }
-    return true;
+    const int hovered = Bounds{22, 485, 145, 38}.contains(x, y) ? 0 :
+                        Bounds{175, 485, 155, 38}.contains(x, y) ? 1 : -1;
+    if (hovered != tooltipMode_) {
+      tooltipMode_ = hovered;
+      repaint();
+    }
+    return hovered >= 0;
+  }
+
+  void uiFocus(bool focus, CrossingMode) override {
+    if (!focus) {
+      if (activeDial_ != ParamId::count) {
+        editParameter(paramIndex(activeDial_), false);
+        activeDial_ = ParamId::count;
+      }
+      resetPressed_ = false;
+      tooltipMode_ = -1;
+      lastClickedDial_ = ParamId::count;
+      repaint();
+    }
   }
 
   bool onScroll(const ScrollEvent &event) override {
@@ -291,13 +315,10 @@ protected:
     const float y = static_cast<float>(event.pos.getY()) * kDesignHeight /
                     static_cast<float>(getHeight());
 
-    for (const ParamId id : kSliderParameters) {
-      if ((id == ParamId::maxCut) != settingsOpen_ && id != ParamId::targetLevel)
-        continue;
-      if (!sliderBounds(id).contains(x, y) &&
-          !(id == ParamId::targetLevel && (kTargetDial.contains(x, y) ||
-                                        Bounds{221, 365, 65, 33}.contains(x, y))))
-        continue;
+    tooltipMode_ = -1;
+    lastClickedDial_ = ParamId::count;
+    for (const ParamId id : kDialParameters) {
+      if (!dialVisible(id) || !dialBounds(id).contains(x, y)) continue;
 
       const gainpilot::ParameterSpec &spec = gainpilot::parameterSpec(id);
       const float step = (spec.maxValue - spec.minValue) / 100.0f;
@@ -348,6 +369,41 @@ private:
         if (id == ParamId::channelMode) continue;
       setDiscreteParameter(id, state.get(id));
     }
+  }
+
+  bool dialVisible(ParamId id) const {
+    return id == ParamId::targetLevel || (id == ParamId::maxCut) == settingsOpen_;
+  }
+
+  void startMeterReset() {
+    resetPressed_ = true;
+    if (resetPending_) return;
+    resetCountBefore_ = values_[paramIndex(ParamId::meterResetCount)];
+    resetPending_ = true;
+    resetAcknowledged_ = false;
+    // Keep high until a processed reset is observed. Some hosts coalesce a
+    // press/release pair occurring between audio blocks to its final value.
+    setDiscreteParameter(ParamId::meterReset, 1);
+  }
+
+  void finishMeterReset() {
+    if (!resetPending_ || !resetAcknowledged_) return;
+    resetPending_ = false;
+    setDiscreteParameter(ParamId::meterReset, 0);
+  }
+
+  void drawModeTooltip() {
+    if (tooltipMode_ < 0 || activeDial_ != ParamId::count) return;
+    fillRounded(22, 388, 308, 53, 7, 24, 38, 47);
+    strokeRounded(22, 388, 308, 53, 7, 1, 63, 91, 107);
+    drawText(33, 401, 11, tooltipMode_ == 0 ? "Auto" : "Speech",
+             46, 221, 243, ALIGN_LEFT | ALIGN_MIDDLE);
+    label(33, 417, tooltipMode_ == 0 ?
+          "General leveling for music and mixed audio." :
+          "Voice leveling with gentler transient control.", 10);
+    label(33, 431, tooltipMode_ == 0 ?
+          "Stronger response to loud transients." :
+          "Smoother changes between spoken phrases.", 10);
   }
 
   void updateGeometryConstraints() {
@@ -435,18 +491,6 @@ private:
     std::snprintf(value, sizeof(value), "%.1f", values_[paramIndex(ParamId::targetLevel)]);
     drawText(cx, 238, 54, value, 43, 218, 242, ALIGN_CENTER | ALIGN_MIDDLE);
     drawText(cx, 281, 16, "LUFS", 206, 213, 223, ALIGN_CENTER | ALIGN_MIDDLE);
-    fillRounded(50, 379, 140, 5, 2.5f, 71, 80, 90);
-    fillRounded(50, 379, std::max(1.0f, 140 * n), 5, 2.5f, 38, 155, 218);
-    circleFill(50 + 140 * n, 381.5f, 9, 243, 245, 249);
-    const auto& spec = gainpilot::parameterSpec(ParamId::targetLevel);
-    char minimum[16], maximum[16];
-    std::snprintf(minimum, sizeof(minimum), "%.0f", spec.minValue);
-    std::snprintf(maximum, sizeof(maximum), "%.0f", spec.maxValue);
-    label(22, 382, minimum); label(200, 382, maximum);
-    fillRounded(221, 365, 65, 33, 7, 15, 23, 29);
-    strokeRounded(221, 365, 65, 33, 7, 1, 45, 58, 68);
-    drawText(253.5f, 382, 12, value, 242, 245, 250, ALIGN_CENTER | ALIGN_MIDDLE);
-    label(293, 382, "LUFS", 12);
   }
 
   void drawResponseCard() {
@@ -700,18 +744,6 @@ private:
     return true;
   }
 
-  void updateSliderFromX(const ParamId id, const float x) {
-    const Bounds bounds = sliderBounds(id);
-    const gainpilot::ParameterSpec &spec = gainpilot::parameterSpec(id);
-    const float normalized =
-        std::clamp((x - bounds.x) / bounds.width, 0.0f, 1.0f);
-    const float value =
-        spec.minValue + normalized * (spec.maxValue - spec.minValue);
-    values_[paramIndex(id)] = value;
-    setParameterValue(paramIndex(id), value);
-    repaint();
-  }
-
   void updateKnobFromY(const ParamId id, const float y) {
     const gainpilot::ParameterSpec &spec = gainpilot::parameterSpec(id);
     const float range = spec.maxValue - spec.minValue;
@@ -725,11 +757,18 @@ private:
   std::array<float, gainpilot::kNumParameters> values_{};
   gainpilot::ui::GainHistory history_{};
   double historyNow_{0.0};
-  ParamId activeSlider_{ParamId::count};
+  ParamId activeDial_{ParamId::count};
   float dragStartY_{0.0f};
   float dragStartValue_{0.0f};
   bool settingsOpen_{false};
-  bool targetTrackDrag_{false};
+  int tooltipMode_{-1};
+  ParamId lastClickedDial_{ParamId::count};
+  std::uint32_t lastClickTime_{0};
+  float lastClickX_{0};
+  float lastClickY_{0};
+  bool resetPending_{false};
+  bool resetAcknowledged_{false};
+  float resetCountBefore_{0};
   bool resetPressed_{false};
   bool capturing_{false};
   bool captureAcknowledged_{false};
