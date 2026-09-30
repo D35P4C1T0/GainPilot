@@ -1,6 +1,8 @@
 # GainPilot optimization and improvement plan
 
-Prepared on 2026-09-30. Status: implementation delegated to five isolated improvement branches.
+Prepared on 2026-09-30. Status: implemented across five improvement branches;
+combined checks pass on `improvements/integration`. See
+[integration validation](integration-validation.md) for results and remaining checks.
 
 This plan covers all eight findings from the project audit, ordered by expected
 implementation difficulty. Each stage should be a separate reviewable change.
@@ -283,3 +285,8 @@ CMake wiring, using conditional source registration so each branch remains
 buildable before integration. Integrate the build branch first, then host/UI,
 meter/controller, limiter, and offline targeting; rerun correctness and timing
 checks on the combined result. Timing artifacts do not establish certification.
+
+The combined branch includes all five workstreams and their CMake registrations.
+The individual implementation branches retain focused commits; the offline tool's
+CMake targets require the build-infrastructure workstream. Use the integration
+branch for the complete build and test workflow.
