@@ -1,4 +1,5 @@
-#include "gainpilot/dsp/true_peak_limiter.hpp"
+// Test-only baseline: compile separately to match the production kernel boundary.
+#include "scalar_reference_limiter.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -17,7 +18,7 @@ float dbToLinear(float valueDb) { return std::pow(10.0f, valueDb / 20.0f); }
 
 } // namespace
 
-void TruePeakLimiter::prepare(double sampleRate, std::size_t channelCount,
+void ScalarReferenceLimiter::prepare(double sampleRate, std::size_t channelCount,
                               double latencySeconds) {
   sampleRate_ = sampleRate;
   channelCount_ = channelCount;
@@ -29,7 +30,7 @@ void TruePeakLimiter::prepare(double sampleRate, std::size_t channelCount,
   sampleHistory_.assign(channelCount_, {});
   requiredGainWindow_.resize(lookaheadSamples_ + kFilterTaps + 2);
   const auto makeInterpolation = [](auto &filters) {
-    const auto taps = filters.size();
+    const auto taps = filters[0].size();
     for (std::size_t phase = 1; phase < kPhases; ++phase) {
       double sum = 0.0;
       for (std::size_t tap = 0; tap < taps; ++tap) {
@@ -38,11 +39,11 @@ void TruePeakLimiter::prepare(double sampleRate, std::size_t channelCount,
             (taps / 2 - 1 + static_cast<double>(phase) / kPhases);
         const double sinc = std::sin(kPi * offset) / (kPi * offset);
         const double window = 0.5 + 0.5 * std::cos(2.0 * kPi * offset / taps);
-        filters[tap][phase - 1] = static_cast<float>(sinc * window);
+        filters[phase - 1][tap] = static_cast<float>(sinc * window);
         sum += sinc * window;
       }
-      for (auto &tap : filters)
-        tap[phase - 1] = static_cast<float>(tap[phase - 1] / sum);
+      for (float &coefficient : filters[phase - 1])
+        coefficient = static_cast<float>(coefficient / sum);
     }
   };
   makeInterpolation(interpolation_);
@@ -57,11 +58,10 @@ void TruePeakLimiter::prepare(double sampleRate, std::size_t channelCount,
           (kFilterTaps / 2 - 1 + static_cast<double>(phase) / kPhases);
       const double value = (x == 0 ? .95 : std::sin(kPi * .95 * x) / (kPi * x)) *
           (.5 + .5 * std::cos(2 * kPi * x / kFilterTaps));
-      bandlimitedInterpolation_[tap][phase] = static_cast<float>(value);
+      bandlimitedInterpolation_[phase][tap] = static_cast<float>(value);
       sum += value;
     }
-    for (auto &tap : bandlimitedInterpolation_)
-      tap[phase] /= static_cast<float>(sum);
+    for (float& value : bandlimitedInterpolation_[phase]) value /= static_cast<float>(sum);
   }
 
   const float releaseSeconds = 0.100f;
@@ -70,7 +70,7 @@ void TruePeakLimiter::prepare(double sampleRate, std::size_t channelCount,
   reset();
 }
 
-void TruePeakLimiter::reset() {
+void ScalarReferenceLimiter::reset() {
   sampleIndex_ = 0;
   writeIndex_ = 0;
   envelopeGain_ = 1.0f;
@@ -83,33 +83,31 @@ void TruePeakLimiter::reset() {
   }
 }
 
-void TruePeakLimiter::setCeilingDb(float ceilingDb) {
+void ScalarReferenceLimiter::setCeilingDb(float ceilingDb) {
   ceilingLinear_ = dbToLinear(ceilingDb - kPeakSafetyDb);
 }
 
-std::size_t TruePeakLimiter::latencySamples() const {
+std::size_t ScalarReferenceLimiter::latencySamples() const {
   return lookaheadSamples_;
 }
 
-void TruePeakLimiter::pushHistorySample(std::size_t channel, float sample) {
+void ScalarReferenceLimiter::pushHistorySample(std::size_t channel, float sample) {
   auto &history = sampleHistory_[channel];
   history[historyWrite_] = history[historyWrite_ + kFilterTaps] = sample;
 }
 
-float TruePeakLimiter::estimatePeak(std::size_t channel) const {
+float ScalarReferenceLimiter::estimatePeak(std::size_t channel) const {
   const auto &history = sampleHistory_[channel];
   const float *samples = history.data() + (historyWrite_ + 1) % kFilterTaps;
   float peak = std::fabs(history[historyWrite_]);
   const auto measure = [&](const auto &filters) {
-    std::array<float, kPhases> reconstructed{};
-    const auto taps = filters.size();
-    for (std::size_t tap = 0; tap < taps; ++tap) {
-      const float sample = samples[kFilterTaps - taps + tap];
-      for (std::size_t phase = 0; phase < kPhases; ++phase)
-        reconstructed[phase] += filters[tap][phase] * sample;
+    const auto taps = filters[0].size();
+    for (const auto &phase : filters) {
+      float reconstructed = 0.0f;
+      for (std::size_t tap = 0; tap < taps; ++tap)
+        reconstructed += phase[tap] * samples[kFilterTaps - taps + tap];
+      peak = std::max(peak, std::fabs(reconstructed));
     }
-    for (const float value : reconstructed)
-      peak = std::max(peak, std::fabs(value));
   };
   measure(interpolation_);
   measure(shortInterpolation_);
@@ -118,7 +116,7 @@ float TruePeakLimiter::estimatePeak(std::size_t channel) const {
   return peak;
 }
 
-void TruePeakLimiter::pushRequiredGain(float inversePeak) {
+void ScalarReferenceLimiter::pushRequiredGain(float inversePeak) {
   const auto capacity = requiredGainWindow_.size();
   // Retain a detected peak until its complete FIR support has left the delay.
   const auto horizon = lookaheadSamples_ + kFilterTaps;
@@ -136,7 +134,7 @@ void TruePeakLimiter::pushRequiredGain(float inversePeak) {
   ++queueSize_;
 }
 
-void TruePeakLimiter::processFrame(const float *input, float *output,
+void ScalarReferenceLimiter::processFrame(const float *input, float *output,
                                    float preGainLinear) {
   float instantaneousRequiredGain = 1.0e9f;
 

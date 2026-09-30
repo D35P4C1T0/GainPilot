@@ -19,7 +19,7 @@ int main(int argc, char** argv) {
   constexpr double pi = 3.14159265358979323846;
   bool passed = true;
   for (double rate : {44100., 48000., 96000.}) {
-    for (int shape = 0; shape < 20; ++shape) {
+    for (int shape = 0; shape < 22; ++shape) {
       gainpilot::dsp::GainPilotProcessor processor;
       gainpilot::ParameterState state;
       const size_t block = shape % 3 == 0 ? 1 : (shape % 3 == 1 ? 127 : 1024);
@@ -50,6 +50,12 @@ int main(int argc, char** argv) {
           processor.setParameters(state);
           changed = true;
         }
+        // Exercise upstream gain automation while old samples remain delayed.
+        if (shape == 20) {
+          state.set(gainpilot::ParamId::inputTrim,
+                    static_cast<float>(9 + 9 * std::sin(offset * .0007)));
+          processor.setParameters(state);
+        }
         for (size_t n = 0; n < block; ++n) {
           const size_t i = offset + n;
           double value = 0;
@@ -77,6 +83,12 @@ int main(int argc, char** argv) {
             break;
           case 7:
             value = .99 * std::sin(2 * pi * .1 * i);
+            break;
+          case 20:
+            value = noise(random);
+            break;
+          case 21:
+            value = noise(random) * (.5 + .5 * std::sin(i * .031));
             break;
           default:
             value = i % 9000 < static_cast<size_t>((shape - 7) * 7)
