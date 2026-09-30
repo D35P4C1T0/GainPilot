@@ -1,6 +1,7 @@
 #include <AudioToolbox/AudioToolbox.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <cmath>
+#include <algorithm>
 #include <cstring>
 #include <iostream>
 #include <vector>
@@ -48,7 +49,7 @@ int main(int argc, char** argv) {
       sizeof(float), 1, sizeof(float), channels, 32, 0};
   check(AudioUnitSetProperty(unit, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Input, 0, &format, sizeof(format)), "Input format");
   check(AudioUnitSetProperty(unit, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Output, 0, &format, sizeof(format)), "Output format");
-  UInt32 maxFrames = 256;
+  UInt32 maxFrames = 1024;
   check(AudioUnitSetProperty(unit, kAudioUnitProperty_MaximumFramesPerSlice, kAudioUnitScope_Global, 0, &maxFrames, sizeof(maxFrames)), "Block size");
   AURenderCallbackStruct callback{input, nullptr};
   check(AudioUnitSetProperty(unit, kAudioUnitProperty_SetRenderCallback, kAudioUnitScope_Input, 0, &callback, sizeof(callback)), "Input callback");
@@ -59,6 +60,8 @@ int main(int argc, char** argv) {
   set(gainpilot::ParamId::correctionLow, 0);
   set(gainpilot::ParamId::targetLevel, -23);
   set(gainpilot::ParamId::inputLevel, -23);
+  set(gainpilot::ParamId::referenceMode, 1);
+  set(gainpilot::ParamId::lockedReference, -23);
   check(AudioUnitInitialize(unit), "Initialize");
   Float64 latency = 0;
   UInt32 size = sizeof(latency);
@@ -67,22 +70,62 @@ int main(int argc, char** argv) {
   if (delay != 1698) { std::cerr << "Unexpected AU latency " << delay << '\n'; return 1; }
   struct Buffers { UInt32 count; AudioBuffer buffers[2]; } audio{};
   audio.count = channels;
-  std::vector<float> left(256), right(256);
+  std::vector<float> left(1024), right(1024);
   audio.buffers[0] = {1, 256 * sizeof(float), left.data()};
   audio.buffers[1] = {1, 256 * sizeof(float), right.data()};
-  for (std::size_t frame = 0; frame < 4096; frame += 256) {
+  AudioUnitParameterValue epochBefore = 0, epochAfter = 0;
+  check(AudioUnitGetParameter(unit, static_cast<AudioUnitParameterID>(gainpilot::ParamId::meterResetCount), kAudioUnitScope_Global, 0, &epochBefore), "Initial reset epoch");
+  std::size_t frame = 0;
+  std::size_t blockIndex = 0;
+  constexpr UInt32 blocks[]{256, 1, 127, 1024};
+  while (frame < 4096) {
+    // Variable render lengths fit within the declared maximum without an
+    // activation cycle, so delayed audio and the meter epoch must continue.
+    const UInt32 requested = blocks[blockIndex++ % 4];
+    const UInt32 count = static_cast<UInt32>(std::min<std::size_t>(requested, 4096 - frame));
+    audio.buffers[0].mDataByteSize = count * sizeof(float);
+    audio.buffers[1].mDataByteSize = count * sizeof(float);
     AudioTimeStamp time{};
     time.mFlags = kAudioTimeStampSampleTimeValid;
     time.mSampleTime = static_cast<Float64>(frame);
     AudioUnitRenderActionFlags flags = 0;
-    check(AudioUnitRender(unit, &flags, &time, 0, 256, reinterpret_cast<AudioBufferList*>(&audio)), "Render");
-    for (std::size_t n = 0; n < 256; ++n) {
+    check(AudioUnitRender(unit, &flags, &time, 0, count, reinterpret_cast<AudioBufferList*>(&audio)), "Render");
+    for (std::size_t n = 0; n < count; ++n) {
       const float expected = frame + n == delay ? .1f : 0;
       if (std::abs(left[n] - expected) > 1e-6f || (channels == 2 && std::abs(right[n] - expected) > 1e-6f)) {
         std::cerr << "AU routing/delay mismatch at " << frame + n << '\n'; return 1;
       }
     }
+    check(AudioUnitGetParameter(unit, static_cast<AudioUnitParameterID>(gainpilot::ParamId::meterResetCount), kAudioUnitScope_Global, 0, &epochAfter), "Reset epoch after variable render");
+    if (blockIndex == 1) epochBefore = epochAfter; // First render publishes activation reset.
+    if (epochBefore != epochAfter) { std::cerr << "Variable render reset meters\n"; return 1; }
+    AudioUnitParameterValue reference = 0;
+    check(AudioUnitGetParameter(unit, static_cast<AudioUnitParameterID>(gainpilot::ParamId::lockedReference), kAudioUnitScope_Global, 0, &reference), "Reference after variable render");
+    if (reference != -23.0f) { std::cerr << "Variable render lost locked reference\n"; return 1; }
+    size = sizeof(latency);
+    check(AudioUnitGetProperty(unit, kAudioUnitProperty_Latency, kAudioUnitScope_Global, 0, &latency, &size), "Latency after variable render");
+    if (static_cast<std::size_t>(std::llround(latency * 48000)) != delay) return 1;
+    frame += count;
   }
+  // DPF wraps a live maximum-slice notification in deactivate/activate.
+  // Its explicit activation reset is intentional; changing the maximum must
+  // still leave the locked reference and reported latency intact.
+  maxFrames = 256;
+  check(AudioUnitSetProperty(unit, kAudioUnitProperty_MaximumFramesPerSlice, kAudioUnitScope_Global, 0, &maxFrames, sizeof(maxFrames)), "Restore block size");
+  audio.buffers[0].mDataByteSize = 256 * sizeof(float);
+  audio.buffers[1].mDataByteSize = 256 * sizeof(float);
+  AudioTimeStamp resizeTime{};
+  resizeTime.mFlags = kAudioTimeStampSampleTimeValid;
+  resizeTime.mSampleTime = 4096;
+  AudioUnitRenderActionFlags resizeFlags = 0;
+  check(AudioUnitRender(unit, &resizeFlags, &resizeTime, 0, 256, reinterpret_cast<AudioBufferList*>(&audio)), "Render after maximum-slice change");
+  check(AudioUnitGetParameter(unit, static_cast<AudioUnitParameterID>(gainpilot::ParamId::meterResetCount), kAudioUnitScope_Global, 0, &epochAfter), "Activation reset epoch");
+  if (epochAfter != epochBefore + 1) { std::cerr << "Maximum-slice change added redundant reset\n"; return 1; }
+  AudioUnitParameterValue referenceAfterResize = 0;
+  check(AudioUnitGetParameter(unit, static_cast<AudioUnitParameterID>(gainpilot::ParamId::lockedReference), kAudioUnitScope_Global, 0, &referenceAfterResize), "Reference after resize");
+  size = sizeof(latency);
+  check(AudioUnitGetProperty(unit, kAudioUnitProperty_Latency, kAudioUnitScope_Global, 0, &latency, &size), "Latency after resize");
+  if (referenceAfterResize != -23.0f || static_cast<std::size_t>(std::llround(latency * 48000)) != delay) return 1;
   AudioUnitParameterValue resetBefore = 0, resetAfter = 0;
   check(AudioUnitGetParameter(unit, static_cast<AudioUnitParameterID>(gainpilot::ParamId::meterResetCount), kAudioUnitScope_Global, 0, &resetBefore), "Reset count");
   // GUI press and release can both arrive before the next audio callback.
@@ -90,7 +133,7 @@ int main(int argc, char** argv) {
   set(gainpilot::ParamId::meterReset, 0);
   AudioTimeStamp resetTime{};
   resetTime.mFlags = kAudioTimeStampSampleTimeValid;
-  resetTime.mSampleTime = 4096;
+  resetTime.mSampleTime = 4352;
   AudioUnitRenderActionFlags resetFlags = 0;
   check(AudioUnitRender(unit, &resetFlags, &resetTime, 0, 256, reinterpret_cast<AudioBufferList*>(&audio)), "Render after reset pulse");
   check(AudioUnitGetParameter(unit, static_cast<AudioUnitParameterID>(gainpilot::ParamId::meterResetCount), kAudioUnitScope_Global, 0, &resetAfter), "Reset acknowledgement");
