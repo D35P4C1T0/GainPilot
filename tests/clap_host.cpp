@@ -164,7 +164,7 @@ int main(int argc, char** argv) try {
     host.poll(plugin);
   };
   for (double rate : {44100., 48000., 96000.}) {
-    for (uint32_t block : {1u, 127u, 1024u}) {
+    for (uint32_t block : {1u, 127u, 256u, 1024u}) {
       host.activating = true;
       require(plugin->activate(plugin, rate, 1, block), "Activation failed");
       host.activating = false;

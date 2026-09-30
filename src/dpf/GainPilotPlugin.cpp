@@ -344,9 +344,11 @@ protected:
 
     }
 
-    void bufferSizeChanged(const std::uint32_t newBufferSize) override
+    void bufferSizeChanged(const std::uint32_t) override
     {
-        prepareProcessor(getSampleRate(), newBufferSize);
+        // The core has no block-sized scratch storage. A host notification alone
+        // must preserve meter history, learned reference and delayed audio.
+        // Explicit activation and actual sample-rate changes still reset it.
     }
 
     void sampleRateChanged(const double newSampleRate) override
