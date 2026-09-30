@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.0] - 2026-09-30
+
+- Replace the brushed-metal editor with a flat dark interface, cyan target dial, filled 60-second gain graph, and three primary rotary controls.
+- Move input-reference learning, maximum cut, presets, and loudness readouts into settings; add Auto/Speech hover tips and double-click dial defaults.
+- Restore parameter defaults and clear gain history with Reset; keep Reset/Relearn active until the DSP acknowledges it so hosts cannot lose short GUI clicks.
+- Correct editor scaling on high-DPI displays and timestamp gain history using the editor clock, preserving gaps during inactivity.
+- Reduce meter/controller work with cached block and control-hop values, shared rolling energy storage, bounded loudness-gate queries, and bounded reset work.
+- Skip unused stereo-meter paths in the dedicated mono variant and vectorize limiter reconstruction across FIR phases.
+- Preserve processing history on host buffer-size changes; isolate patched DPF build copies from the source checkout.
+- Add whole-file loudness targeting, timing benchmarks, and combined regression validation; fix MSVC limiter-test compilation for Windows CI.
+
 ## [0.5.1] - 2026-09-11
 
 - Fix reproduced true-peak overshoots using 16-phase, multiple-support reconstruction guards and immediate safety attenuation; retain the 0.3 dB reserve and existing latency.
