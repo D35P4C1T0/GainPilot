@@ -17,8 +17,8 @@ namespace {
 
 using gainpilot::ParamId;
 
-constexpr float kDesignWidth = 840.0f;
-constexpr float kDesignHeight = 540.0f;
+constexpr float kDesignWidth = 960.0f;
+constexpr float kDesignHeight = 544.0f;
 constexpr std::array<ParamId, 5> kSliderParameters{
     ParamId::targetLevel,
     ParamId::inputTrim,
@@ -45,25 +45,23 @@ struct Bounds {
   }
 };
 
+constexpr Bounds kTargetTrack{50, 370, 140, 22};
+constexpr Bounds kTargetDial{40, 104, 264, 252};
+constexpr Bounds kSettings{347, 78, 598, 365};
+
 Bounds sliderBounds(const ParamId id) noexcept {
   switch (id) {
-  case ParamId::targetLevel:
-    return {67.0f, 207.0f, 218.0f, 25.0f};
-  case ParamId::inputTrim:
-    return {327.0f, 319.0f, 112.0f, 112.0f};
-  case ParamId::truePeak:
-    return {441.0f, 319.0f, 112.0f, 112.0f};
-  case ParamId::maxGain:
-    return {555.0f, 319.0f, 112.0f, 112.0f};
-  case ParamId::maxCut:
-    return {669.0f, 319.0f, 112.0f, 112.0f};
-  default:
-    return {};
+  case ParamId::targetLevel: return kTargetTrack;
+  case ParamId::inputTrim: return {382, 325, 102, 117};
+  case ParamId::truePeak: return {587, 325, 102, 117};
+  case ParamId::maxGain: return {790, 325, 102, 117};
+  case ParamId::maxCut: return {779, 146, 102, 130};
+  default: return {};
   }
 }
 
 Bounds scaleButtonBounds(const std::size_t index) noexcept {
-  return {645.0f + static_cast<float>(index) * 35.0f, 45.0f, 32.0f, 15.0f};
+  return {729 + static_cast<float>(index) * 44, 21, 44, 27};
 }
 
 const char *shortLabel(const ParamId id) noexcept {
@@ -75,7 +73,7 @@ const char *shortLabel(const ParamId id) noexcept {
   case ParamId::truePeak:
     return "TRUE-PEAK CEILING";
   case ParamId::maxGain:
-    return "MAX BOOST";
+    return "MAX GAIN";
   case ParamId::maxCut:
     return "MAX CUT";
   default:
@@ -96,7 +94,7 @@ public:
           static_cast<float>(gainpilot::ChannelMode::mono);
 
     loadSharedResources();
-    setGeometryConstraints(630, 405, true);
+    updateGeometryConstraints();
   }
 
 protected:
@@ -120,6 +118,11 @@ protected:
       repaint();
   }
 
+  void uiScaleFactorChanged(double) override {
+    updateGeometryConstraints();
+    repaint();
+  }
+
   void stateChanged(const char *, const char *) override {}
 
   void onNanoDisplay() override {
@@ -131,7 +134,10 @@ protected:
     drawChassis();
     drawHeader();
     drawTargetCard();
-    drawResponseCard();
+    if (settingsOpen_)
+      drawSettings();
+    else
+      drawResponseCard();
     drawWorkflow();
 
     restore();
@@ -145,7 +151,6 @@ protected:
                     static_cast<float>(getWidth());
     const float y = static_cast<float>(event.pos.getY()) * kDesignHeight /
                     static_cast<float>(getHeight());
-
 
     if (!event.press) {
       if (activeSlider_ != ParamId::count) {
@@ -164,13 +169,18 @@ protected:
     }
 
     for (const ParamId id : kSliderParameters) {
+      if ((id == ParamId::maxCut) != settingsOpen_ && id != ParamId::targetLevel)
+        continue;
       const Bounds bounds = sliderBounds(id);
-      if (!bounds.contains(x, y))
+      const bool targetDial = id == ParamId::targetLevel &&
+          (kTargetDial.contains(x, y) || Bounds{221, 365, 65, 33}.contains(x, y));
+      if (!bounds.contains(x, y) && !targetDial)
         continue;
 
       activeSlider_ = id;
       editParameter(paramIndex(id), true);
-      if (id == ParamId::targetLevel) {
+      targetTrackDrag_ = id == ParamId::targetLevel && !targetDial;
+      if (targetTrackDrag_) {
         updateSliderFromX(id, x);
       } else {
         dragStartY_ = y;
@@ -184,11 +194,18 @@ protected:
         return setUiScale(index);
     }
 
-    if (Bounds{67, 477, 74, 27}.contains(x, y)) {
+    if (Bounds{918, 18, 30, 32}.contains(x, y) ||
+        (settingsOpen_ && Bounds{908, 86, 28, 28}.contains(x, y))) {
+      settingsOpen_ = !settingsOpen_;
+      repaint();
+      return true;
+    }
+
+    if (settingsOpen_ && Bounds{366, 191, 92, 35}.contains(x, y)) {
       capturing_ = false;
       return setDiscreteParameter(ParamId::referenceMode, 0);
     }
-    if (Bounds{147, 477, 90, 27}.contains(x, y)) {
+    if (settingsOpen_ && Bounds{470, 191, 119, 35}.contains(x, y)) {
       capturing_ = true;
       captureAcknowledged_ = false;
       captureResetCount_ = values_[paramIndex(ParamId::meterResetCount)];
@@ -200,7 +217,7 @@ protected:
       repaint();
       return true;
     }
-    if (Bounds{243, 477, 103, 27}.contains(x, y)) {
+    if (settingsOpen_ && Bounds{601, 191, 123, 35}.contains(x, y)) {
       const float measured = values_[paramIndex(ParamId::inputIntegratedValue)];
       if (measured <= -70 || (capturing_ && !captureAcknowledged_)) {
         status_ = "Waiting for a fresh loudness measurement";
@@ -213,14 +230,14 @@ protected:
       status_ = "Reference locked; saved with the session";
       return setDiscreteParameter(ParamId::referenceMode, 1);
     }
-    if (Bounds{440, 477, 151, 27}.contains(x, y)) {
+    if (settingsOpen_ && Bounds{366, 268, 209, 34}.contains(x, y)) {
       presetIndex_ = (presetIndex_ + 1) % gainpilot::kFactoryPresetNames.size();
       applyPreset(gainpilot::factoryPreset(presetIndex_));
       status_ = gainpilot::kFactoryPresetNames[presetIndex_];
       return true;
     }
-    if (Bounds{597, 477, 70, 27}.contains(x, y) || Bounds{673, 477, 70, 27}.contains(x, y)) {
-      savingPreset_ = x < 670;
+    if (settingsOpen_ && (Bounds{587, 268, 65, 34}.contains(x, y) || Bounds{664, 268, 65, 34}.contains(x, y))) {
+      savingPreset_ = x < 660;
       FileBrowserOptions options;
       options.saving = savingPreset_;
       options.defaultName = "GainPilot.gainpilot";
@@ -232,16 +249,16 @@ protected:
       return true;
     }
 
-    if (Bounds{342.0f, 96.0f, 82.0f, 33.0f}.contains(x, y))
+    if (Bounds{22, 485, 145, 38}.contains(x, y))
       return setDiscreteParameter(ParamId::programMode, 0.0f);
-    if (Bounds{429.0f, 96.0f, 85.0f, 33.0f}.contains(x, y))
+    if (Bounds{175, 485, 155, 38}.contains(x, y))
       return setDiscreteParameter(ParamId::programMode, 1.0f);
-    if (Bounds{585.0f, 96.0f, 86.0f, 33.0f}.contains(x, y))
+    if (Bounds{385, 485, 132, 38}.contains(x, y))
       return setDiscreteParameter(ParamId::channelMode, 0.0f);
-    if (Bounds{677.0f, 96.0f, 86.0f, 33.0f}.contains(x, y))
+    if (Bounds{525, 485, 142, 38}.contains(x, y))
       return setDiscreteParameter(ParamId::channelMode, 1.0f);
 
-    if (Bounds{67.0f, 384.0f, 218.0f, 38.0f}.contains(x, y)) {
+    if (Bounds{823, 482, 120, 40}.contains(x, y)) {
       resetPressed_ = true;
       editParameter(paramIndex(ParamId::meterReset), true);
       setParameterValue(paramIndex(ParamId::meterReset), 1.0f);
@@ -258,7 +275,7 @@ protected:
 
     const float x = static_cast<float>(event.pos.getX()) * kDesignWidth /
                     static_cast<float>(getWidth());
-    if (activeSlider_ == ParamId::targetLevel) {
+    if (targetTrackDrag_) {
       updateSliderFromX(activeSlider_, x);
     } else {
       const float y = static_cast<float>(event.pos.getY()) * kDesignHeight /
@@ -275,7 +292,11 @@ protected:
                     static_cast<float>(getHeight());
 
     for (const ParamId id : kSliderParameters) {
-      if (!sliderBounds(id).contains(x, y))
+      if ((id == ParamId::maxCut) != settingsOpen_ && id != ParamId::targetLevel)
+        continue;
+      if (!sliderBounds(id).contains(x, y) &&
+          !(id == ParamId::targetLevel && (kTargetDial.contains(x, y) ||
+                                        Bounds{221, 365, 65, 33}.contains(x, y))))
         continue;
 
       const gainpilot::ParameterSpec &spec = gainpilot::parameterSpec(id);
@@ -287,6 +308,15 @@ protected:
       values_[paramIndex(id)] = next;
       setParameterValue(paramIndex(id), next);
       editParameter(paramIndex(id), false);
+      repaint();
+      return true;
+    }
+    return false;
+  }
+
+  bool onKeyboard(const KeyboardEvent& event) override {
+    if (event.press && event.key == kKeyEscape && settingsOpen_) {
+      settingsOpen_ = false;
       repaint();
       return true;
     }
@@ -320,478 +350,281 @@ private:
     }
   }
 
-  void drawWorkflow() {
-    drawPanel(45, 452, 746, 66, 10);
-    char label[100]{};
-    std::snprintf(label, sizeof(label), "INPUT REFERENCE  %.1f LUFS%s",
-                  values_[paramIndex(ParamId::inputReferenceValue)], capturing_ ? "  / CAPTURING" : "");
-    drawText(67, 466, 9, label, 183, 183, 180, ALIGN_LEFT | ALIGN_MIDDLE);
-    drawModeButton({67, 477, 74, 27}, "FOLLOW", !capturing_ && values_[paramIndex(ParamId::referenceMode)] < .5f);
-    drawModeButton({147, 477, 90, 27}, "LEARN INPUT", capturing_);
-    drawModeButton({243, 477, 103, 27}, capturing_ ? "STOP & LOCK" : "LOCK", values_[paramIndex(ParamId::referenceMode)] >= .5f);
-    drawText(440, 466, 9, "NEXT FACTORY PRESET", 183, 183, 180, ALIGN_LEFT | ALIGN_MIDDLE);
-    drawModeButton({440, 477, 151, 27}, gainpilot::kFactoryPresetNames[(presetIndex_ + 1) % gainpilot::kFactoryPresetNames.size()], false);
-    drawModeButton({597, 477, 70, 27}, "SAVE", false);
-    drawModeButton({673, 477, 70, 27}, "LOAD", false);
-    if (!status_.empty())
-      drawText(420, 511, 9, status_.c_str(), 183, 183, 180, ALIGN_CENTER | ALIGN_MIDDLE);
+  void updateGeometryConstraints() {
+    const double dpi = getScaleFactor();
+    setGeometryConstraints(static_cast<uint>(std::lround(720 * dpi)),
+                           static_cast<uint>(std::lround(408 * dpi)), true);
+  }
+
+  static constexpr float kPi = 3.14159265358979323846f;
+
+  float normalized(const ParamId id) const {
+    const auto& spec = gainpilot::parameterSpec(id);
+    return std::clamp((values_[paramIndex(id)] - spec.minValue) /
+                      (spec.maxValue - spec.minValue), 0.0f, 1.0f);
+  }
+
+  void line(float x1, float y1, float x2, float y2, float width,
+            int r, int g, int b) {
+    beginPath(); moveTo(x1, y1); lineTo(x2, y2);
+    strokeWidth(width); strokeColor(r, g, b); stroke();
+  }
+
+  void ring(float x, float y, float radius, float amount, float width,
+            int r, int g, int b) {
+    if (amount <= 0) return;
+    beginPath();
+    arc(x, y, radius, .75f * kPi, (.75f + 1.5f * amount) * kPi, CW);
+    lineCap(ROUND); strokeWidth(width); strokeColor(r, g, b); stroke();
+    lineCap(BUTT);
+  }
+
+  void label(float x, float y, const char* value, float size = 11,
+             int align = ALIGN_LEFT | ALIGN_MIDDLE) {
+    drawText(x, y, size, value, 173, 184, 197, align);
   }
 
   void drawChassis() {
-    fillRect(0.0f, 0.0f, kDesignWidth, kDesignHeight, 6, 7, 7);
-
-    // Layered edge creates thick, rounded, nickel-trimmed faceplate.
-    fillRounded(2.0f, 2.0f, 836.0f, 534.0f, 22.0f, 18, 20, 20);
-    strokeRounded(3.0f, 3.0f, 834.0f, 532.0f, 21.0f, 2.0f, 76, 79, 78);
-    strokeRounded(7.0f, 7.0f, 826.0f, 524.0f, 18.0f, 1.0f, 174, 174, 166);
-    strokeRounded(10.0f, 10.0f, 820.0f, 518.0f, 16.0f, 1.0f, 45, 47, 46);
-    fillRounded(13.0f, 13.0f, 814.0f, 512.0f, 14.0f, 20, 23, 24);
-
-    // Fine horizontal bands suggest brushed black steel without bitmap assets.
-    for (int y = 15; y < 525; y += 3) {
-      beginPath();
-      moveTo(15.0f, static_cast<float>(y));
-      lineTo(825.0f, static_cast<float>(y));
-      strokeWidth(0.45f);
-      const int shade = 24 + (y % 9 == 0 ? 4 : 0);
-      strokeColor(shade, shade + 2, shade + 2);
-      stroke();
-    }
-
-    drawScrew(28.0f, 29.0f);
-    drawScrew(812.0f, 29.0f);
-    drawScrew(28.0f, 511.0f);
-    drawScrew(812.0f, 511.0f);
+    beginPath(); rect(0, 0, kDesignWidth, kDesignHeight);
+    fillPaint(linearGradient(0, 0, 960, 544,
+                            Color(17, 25, 31), Color(12, 19, 24)));
+    fill();
+    strokeRounded(.5f, .5f, 959, 543, 7, 1, 42, 56, 65);
   }
 
   void drawHeader() {
-    drawEmbossedText(57.0f, 33.0f, 30.0f, "GainPilot", 218, 218, 214,
-                     ALIGN_LEFT | ALIGN_MIDDLE);
-    drawText(58.0f, 56.0f, 11.5f,
-             "Adaptive LUFS leveling  /  linked true-peak protection", 176, 178,
-             176, ALIGN_LEFT | ALIGN_MIDDLE);
-    drawText(783.0f, 25.0f, 10.5f, "BS.1770 / EBU R128", 30, 232, 231,
-             ALIGN_RIGHT | ALIGN_MIDDLE);
-    drawText(634.0f, 52.5f, 8.0f, "SCALE", 151, 153, 150,
-             ALIGN_RIGHT | ALIGN_MIDDLE);
-    for (std::size_t index = 0; index < kUiScales.size(); ++index)
-      drawScaleButton(index);
-  }
-
-  void drawScaleButton(const std::size_t index) {
-    const Bounds bounds = scaleButtonBounds(index);
-    const bool selected = index == uiScaleIndex_;
-    fillRounded(bounds.x, bounds.y, bounds.width, bounds.height, 3.0f,
-                selected ? 10 : 20, selected ? 51 : 23, selected ? 53 : 23);
-    strokeRounded(bounds.x, bounds.y, bounds.width, bounds.height, 3.0f, 0.8f,
-                  selected ? 65 : 68, selected ? 211 : 68, selected ? 207 : 64);
-    drawText(bounds.x + bounds.width * 0.5f, bounds.y + bounds.height * 0.5f,
-             7.5f, kUiScaleLabels[index], selected ? 72 : 169,
-             selected ? 232 : 170, selected ? 228 : 167,
-             ALIGN_CENTER | ALIGN_MIDDLE);
+    drawText(22, 33, 34, "GainPilot", 242, 245, 250, ALIGN_LEFT | ALIGN_MIDDLE);
+    label(23, 61, "Adaptive LUFS leveling  ·  Linked true-peak protection", 12);
+    label(711, 34, "Scale", 10, ALIGN_RIGHT | ALIGN_MIDDLE);
+    strokeRounded(729, 21, 176, 27, 7, 1, 45, 57, 67);
+    for (std::size_t i = 0; i < kUiScales.size(); ++i) {
+      const auto b = scaleButtonBounds(i);
+      // The actual width also reflects resizing performed by the host.
+      const bool selected = std::abs(static_cast<float>(getWidth()) /
+                                     kDesignWidth / static_cast<float>(getScaleFactor()) - kUiScales[i]) < .02f;
+      if (selected) {
+        fillRounded(b.x, b.y, b.width, b.height, 7, 14, 34, 42);
+        strokeRounded(b.x, b.y, b.width, b.height, 7, 1.2f, 42, 229, 247);
+      }
+      drawText(b.x + 22, 34, 10, kUiScaleLabels[i], selected ? 49 : 173,
+               selected ? 229 : 184, selected ? 247 : 197, ALIGN_CENTER | ALIGN_MIDDLE);
+    }
+    // Gear remains vector artwork at every UI scale.
+    for (int i = 0; i < 8; ++i) {
+      const float a = static_cast<float>(i) * kPi / 4;
+      line(933 + std::cos(a) * 5, 34 + std::sin(a) * 5,
+           933 + std::cos(a) * 7, 34 + std::sin(a) * 7, 2.3f, 181, 193, 207);
+    }
+    circleStroke(933, 34, 5, 1.8f, 181, 193, 207);
+    circleFill(933, 34, 2, 17, 25, 31);
   }
 
   void drawTargetCard() {
-    drawPanel(45.0f, 68.0f, 262.0f, 374.0f, 14.0f);
-    drawText(176.0f, 93.0f, 10.5f, "TARGET LUFS", 183, 183, 180,
-             ALIGN_CENTER | ALIGN_MIDDLE);
-
-    // Deep glass readout with stepped bezel.
-    fillRounded(81.0f, 103.0f, 187.0f, 78.0f, 10.0f, 6, 7, 7);
-    strokeRounded(81.0f, 103.0f, 187.0f, 78.0f, 10.0f, 1.4f, 109, 105, 94);
-    strokeRounded(85.0f, 107.0f, 179.0f, 70.0f, 7.0f, 1.0f, 22, 24, 24);
-    fillRounded(87.0f, 109.0f, 175.0f, 66.0f, 6.0f, 4, 14, 16);
-    for (int y = 112; y < 174; y += 4)
-      fillRect(89.0f, static_cast<float>(y), 171.0f, 1.0f, 5, 18, 20);
-
-    char valueBuffer[64]{};
-    std::snprintf(valueBuffer, sizeof(valueBuffer), "%.1f",
-                  values_[paramIndex(ParamId::targetLevel)]);
-    drawText(174.5f, 143.0f, 47.0f, valueBuffer, 43, 236, 235,
-             ALIGN_CENTER | ALIGN_MIDDLE);
-
-    drawSlider(ParamId::targetLevel);
-
-    fillRounded(62.0f, 235.0f, 227.0f, 135.0f, 7.0f, 16, 18, 18);
-    strokeRounded(62.0f, 235.0f, 227.0f, 135.0f, 7.0f, 1.0f, 67, 67, 63);
-    drawReadout(75.0f, 251.0f, "Input", ParamId::inputIntegratedValue,
-                "LUFS-I");
-    drawReadout(75.0f, 278.0f, "Output", ParamId::outputIntegratedValue,
-                "LUFS-I");
-    drawReadout(75.0f, 305.0f, "Short-term", ParamId::outputShortTermValue,
-                "LUFS");
-    drawReadout(75.0f, 332.0f, "Gain reduction", ParamId::gainReductionValue,
-                "dB");
-    drawReadout(75.0f, 359.0f, "Applied gain", ParamId::appliedGainValue, "dB");
-
-    for (int y = 263; y <= 344; y += 27) {
-      beginPath();
-      moveTo(63.0f, static_cast<float>(y));
-      lineTo(288.0f, static_cast<float>(y));
-      strokeWidth(0.7f);
-      strokeColor(57, 58, 56);
-      stroke();
-    }
-
-    drawResetButton();
+    constexpr float cx = 171, cy = 237, radius = 129;
+    ring(cx, cy, radius, 1, 9, 37, 46, 54);
+    const float n = normalized(ParamId::targetLevel);
+    ring(cx, cy, radius, n, 9, 45, 216, 239);
+    const float a = (.75f + 1.5f * n) * kPi;
+    circleFill(cx + std::cos(a) * radius, cy + std::sin(a) * radius,
+               6.5f, 243, 247, 252);
+    beginPath(); circle(cx, cy, 81);
+    fillPaint(radialGradient(cx, cy, 5, 88, Color(8, 14, 19), Color(12, 19, 24)));
+    fill();
+    label(cx, 195, "TARGET", 11, ALIGN_CENTER | ALIGN_MIDDLE);
+    char value[32];
+    std::snprintf(value, sizeof(value), "%.1f", values_[paramIndex(ParamId::targetLevel)]);
+    drawText(cx, 238, 54, value, 43, 218, 242, ALIGN_CENTER | ALIGN_MIDDLE);
+    drawText(cx, 281, 16, "LUFS", 206, 213, 223, ALIGN_CENTER | ALIGN_MIDDLE);
+    fillRounded(50, 379, 140, 5, 2.5f, 71, 80, 90);
+    fillRounded(50, 379, std::max(1.0f, 140 * n), 5, 2.5f, 38, 155, 218);
+    circleFill(50 + 140 * n, 381.5f, 9, 243, 245, 249);
+    const auto& spec = gainpilot::parameterSpec(ParamId::targetLevel);
+    char minimum[16], maximum[16];
+    std::snprintf(minimum, sizeof(minimum), "%.0f", spec.minValue);
+    std::snprintf(maximum, sizeof(maximum), "%.0f", spec.maxValue);
+    label(22, 382, minimum); label(200, 382, maximum);
+    fillRounded(221, 365, 65, 33, 7, 15, 23, 29);
+    strokeRounded(221, 365, 65, 33, 7, 1, 45, 58, 68);
+    drawText(253.5f, 382, 12, value, 242, 245, 250, ALIGN_CENTER | ALIGN_MIDDLE);
+    label(293, 382, "LUFS", 12);
   }
 
   void drawResponseCard() {
-    drawPanel(315.0f, 67.0f, 476.0f, 376.0f, 13.0f);
-
-    drawText(343.0f, 85.0f, 10.0f, "PROGRAM", 182, 183, 180,
-             ALIGN_LEFT | ALIGN_MIDDLE);
-    drawText(587.0f, 85.0f, 10.0f, "CHANNEL", 182, 183, 180,
-             ALIGN_LEFT | ALIGN_MIDDLE);
-    drawModeButton({342.0f, 96.0f, 82.0f, 33.0f}, "AUTO",
-                   values_[paramIndex(ParamId::programMode)] < 0.5f);
-    drawModeButton({429.0f, 96.0f, 85.0f, 33.0f}, "SPEECH",
-                   values_[paramIndex(ParamId::programMode)] >= 0.5f);
-    drawModeButton({585.0f, 96.0f, 86.0f, 33.0f}, "STEREO",
-                   values_[paramIndex(ParamId::channelMode)] < 0.5f);
-    drawModeButton({677.0f, 96.0f, 86.0f, 33.0f}, "MONO",
-                   values_[paramIndex(ParamId::channelMode)] >= 0.5f);
-
+    strokeRounded(347, 78, 598, 211, 8, 1, 37, 50, 60);
+    label(362, 97, "APPLIED GAIN");
+    char gain[32];
+    std::snprintf(gain, sizeof(gain), "%+.1f dB", values_[paramIndex(ParamId::appliedGainValue)]);
+    drawText(930, 98, 13, gain, 47, 229, 249, ALIGN_RIGHT | ALIGN_MIDDLE);
     drawHistory();
-
-    fillRounded(326.0f, 318.0f, 454.0f, 115.0f, 7.0f, 18, 20, 20);
-    strokeRounded(326.0f, 318.0f, 454.0f, 115.0f, 7.0f, 1.0f, 58, 61, 59);
-    drawSlider(ParamId::inputTrim);
-    drawSlider(ParamId::truePeak);
-    drawSlider(ParamId::maxGain);
-    drawSlider(ParamId::maxCut);
-    drawVerticalDivider(440.0f, 326.0f, 425.0f);
-    drawVerticalDivider(554.0f, 326.0f, 425.0f);
-    drawVerticalDivider(668.0f, 326.0f, 425.0f);
-  }
-
-  void drawPanel(const float x, const float y, const float width,
-                 const float height, const float radius) {
-    fillRounded(x - 4.0f, y - 4.0f, width + 8.0f, height + 8.0f, radius + 3.0f,
-                4, 5, 5);
-    strokeRounded(x - 3.0f, y - 3.0f, width + 6.0f, height + 6.0f,
-                  radius + 2.0f, 1.0f, 0, 0, 0);
-    fillRounded(x, y, width, height, radius, 27, 29, 29);
-    strokeRounded(x, y, width, height, radius, 1.2f, 122, 120, 111);
-    strokeRounded(x + 4.0f, y + 4.0f, width - 8.0f, height - 8.0f,
-                  std::max(2.0f, radius - 3.0f), 1.0f, 50, 52, 50);
-
-    for (int line = static_cast<int>(y) + 7;
-         line < static_cast<int>(y + height) - 5; line += 4) {
-      beginPath();
-      moveTo(x + 7.0f, static_cast<float>(line));
-      lineTo(x + width - 7.0f, static_cast<float>(line));
-      strokeWidth(0.4f);
-      strokeColor(31, 33, 33);
-      stroke();
-    }
-  }
-
-  void drawModeButton(const Bounds &bounds, const char *const label,
-                      const bool selected) {
-    fillRounded(bounds.x - 4.0f, bounds.y - 4.0f, bounds.width + 8.0f,
-                bounds.height + 8.0f, 7.0f, 5, 6, 6);
-    strokeRounded(bounds.x - 3.0f, bounds.y - 3.0f, bounds.width + 6.0f,
-                  bounds.height + 6.0f, 7.0f, 1.0f, 81, 78, 70);
-    fillRounded(bounds.x, bounds.y, bounds.width, bounds.height, 4.0f,
-                selected ? 10 : 24, selected ? 52 : 27, selected ? 54 : 27);
-    strokeRounded(bounds.x, bounds.y, bounds.width, bounds.height, 4.0f,
-                  selected ? 1.3f : 1.0f, selected ? 128 : 86,
-                  selected ? 237 : 86, selected ? 231 : 81);
-    if (selected)
-      strokeRounded(bounds.x + 4.0f, bounds.y + 4.0f, bounds.width - 8.0f,
-                    bounds.height - 8.0f, 2.0f, 1.0f, 43, 130, 130);
-
-    drawText(bounds.x + bounds.width * 0.5f, bounds.y + bounds.height * 0.5f,
-             10.5f, label, selected ? 89 : 176, selected ? 239 : 177,
-             selected ? 236 : 174, ALIGN_CENTER | ALIGN_MIDDLE);
-  }
-
-  void drawSlider(const ParamId id) {
-    const Bounds bounds = sliderBounds(id);
-    const gainpilot::ParameterSpec &spec = gainpilot::parameterSpec(id);
-    const float value = values_[paramIndex(id)];
-    const float normalized = std::clamp(
-        (value - spec.minValue) / (spec.maxValue - spec.minValue), 0.0f, 1.0f);
-
-    char valueBuffer[48]{};
-    if (id == ParamId::targetLevel)
-      std::snprintf(valueBuffer, sizeof(valueBuffer), "%.1f LUFS", value);
-    else if (id == ParamId::maxCut)
-      std::snprintf(valueBuffer, sizeof(valueBuffer), "-%.1f dB", value);
-    else
-      std::snprintf(valueBuffer, sizeof(valueBuffer), "%+.1f dB", value);
-
-    if (id != ParamId::targetLevel) {
-      drawRotaryControl(id, bounds, normalized, valueBuffer);
-      return;
-    }
-
-    drawText(bounds.x, bounds.y - 10.0f, 10.0f, shortLabel(id), 178, 179, 176,
-             ALIGN_LEFT | ALIGN_MIDDLE);
-    drawText(bounds.x + bounds.width, bounds.y - 10.0f, 10.5f, valueBuffer, 205,
-             205, 201, ALIGN_RIGHT | ALIGN_MIDDLE);
-
-    const float trackY = bounds.y + bounds.height * 0.5f - 3.5f;
-    fillRounded(bounds.x - 2.0f, trackY - 2.0f, bounds.width + 4.0f, 11.0f,
-                5.0f, 5, 6, 6);
-    strokeRounded(bounds.x - 2.0f, trackY - 2.0f, bounds.width + 4.0f, 11.0f,
-                  5.0f, 0.8f, 78, 76, 69);
-    fillRounded(bounds.x, trackY, bounds.width, 7.0f, 3.5f, 8, 10, 10);
-
-    const float activeWidth = std::max(1.0f, bounds.width * normalized);
-    fillRounded(bounds.x, trackY + 1.0f, activeWidth, 5.0f, 2.5f, 19, 196, 193);
-    fillRounded(bounds.x + 1.0f, trackY + 1.0f,
-                std::max(0.0f, activeWidth - 2.0f), 2.0f, 1.0f, 61, 250, 245);
-    drawKnob(bounds.x + bounds.width * normalized, trackY + 3.5f);
-  }
-
-  void drawRotaryControl(const ParamId id, const Bounds &bounds,
-                         const float normalized, const char *const value) {
-    constexpr float kPi = 3.14159265358979323846f;
-    constexpr float startAngle = -0.75f * kPi;
-    constexpr float sweep = 1.5f * kPi;
-    const float centerX = bounds.x + bounds.width * 0.5f;
-    constexpr float centerY = 370.0f;
-    const float valueAngle = startAngle + sweep * normalized;
-
-    drawText(centerX, 332.0f, 9.5f, shortLabel(id), 180, 181, 178,
-             ALIGN_CENTER | ALIGN_MIDDLE);
-
-    for (int tick = 0; tick <= 20; ++tick) {
-      const float amount = static_cast<float>(tick) / 20.0f;
-      const float angle = startAngle + sweep * amount;
-      const float cosine = std::cos(angle);
-      const float sine = std::sin(angle);
-      beginPath();
-      moveTo(centerX + cosine * 27.0f, centerY + sine * 27.0f);
-      lineTo(centerX + cosine * (tick % 5 == 0 ? 31.0f : 29.0f),
-             centerY + sine * (tick % 5 == 0 ? 31.0f : 29.0f));
-      strokeWidth(tick % 5 == 0 ? 1.2f : 0.7f);
-      if (amount <= normalized)
-        strokeColor(38, 222, 218);
-      else
-        strokeColor(70, 73, 70);
-      stroke();
-    }
-
-    circleFill(centerX + 2.0f, centerY + 3.0f, 23.0f, 4, 5, 5);
-    circleFill(centerX, centerY, 23.0f, 47, 48, 46);
-    circleStroke(centerX, centerY, 23.0f, 1.2f, 142, 139, 129);
-    circleFill(centerX, centerY, 19.5f, 133, 133, 128);
-    circleFill(centerX - 4.0f, centerY - 4.0f, 14.0f, 194, 193, 185);
-    circleStroke(centerX, centerY, 18.5f, 1.0f, 62, 62, 59);
-    circleStroke(centerX, centerY, 14.5f, 0.8f, 218, 215, 205);
-
-    beginPath();
-    moveTo(centerX + std::cos(valueAngle) * 7.0f,
-           centerY + std::sin(valueAngle) * 7.0f);
-    lineTo(centerX + std::cos(valueAngle) * 18.0f,
-           centerY + std::sin(valueAngle) * 18.0f);
-    strokeWidth(2.3f);
-    strokeColor(19, 27, 27);
-    stroke();
-    beginPath();
-    moveTo(centerX + std::cos(valueAngle) * 10.0f,
-           centerY + std::sin(valueAngle) * 10.0f);
-    lineTo(centerX + std::cos(valueAngle) * 17.0f,
-           centerY + std::sin(valueAngle) * 17.0f);
-    strokeWidth(1.0f);
-    strokeColor(66, 242, 237);
-    stroke();
-
-    drawKnobValue(centerX, 416.0f, value);
-  }
-
-  void drawKnob(const float x, const float y) {
-    circleFill(x + 1.5f, y + 2.0f, 11.0f, 2, 3, 3);
-    circleFill(x, y, 10.0f, 58, 58, 55);
-    circleStroke(x, y, 10.0f, 1.0f, 163, 161, 151);
-    circleFill(x, y, 8.0f, 174, 174, 168);
-    circleFill(x - 2.0f, y - 2.0f, 5.7f, 217, 216, 208);
-    circleStroke(x, y, 7.0f, 0.7f, 77, 77, 74);
-    beginPath();
-    moveTo(x, y - 7.0f);
-    lineTo(x, y - 1.0f);
-    strokeWidth(1.2f);
-    strokeColor(31, 31, 30);
-    stroke();
-    beginPath();
-    moveTo(x + 1.0f, y - 6.5f);
-    lineTo(x + 1.0f, y - 1.0f);
-    strokeWidth(0.7f);
-    strokeColor(244, 241, 229);
-    stroke();
-  }
-
-  void drawKnobValue(const float centerX, const float y,
-                     const char *const value) {
-    constexpr float width = 63.0f;
-    fillRounded(centerX - width * 0.5f, y - 9.0f, width, 18.0f, 4.0f, 7, 10,
-                10);
-    strokeRounded(centerX - width * 0.5f, y - 9.0f, width, 18.0f, 4.0f, 0.8f,
-                  43, 46, 44);
-    drawText(centerX, y, 10.0f, value, 215, 218, 216,
-             ALIGN_CENTER | ALIGN_MIDDLE);
-  }
-
-  void drawReadout(const float x, const float y, const char *const label,
-                   const ParamId id, const char *const unit) {
-    char valueBuffer[64]{};
-    std::snprintf(valueBuffer, sizeof(valueBuffer), "%+.1f %s",
-                  values_[paramIndex(id)], unit);
-    drawText(x, y, 10.5f, label, 175, 176, 173, ALIGN_LEFT | ALIGN_MIDDLE);
-    drawText(281.0f, y, 10.5f, valueBuffer, 210, 211, 208,
-             ALIGN_RIGHT | ALIGN_MIDDLE);
+    drawRotaryControl(ParamId::inputTrim, 433, 370);
+    drawRotaryControl(ParamId::truePeak, 638, 370);
+    drawRotaryControl(ParamId::maxGain, 841, 370);
   }
 
   void drawHistory() {
-    constexpr Bounds graph{338.0f, 156.0f, 430.0f, 151.0f};
-    drawText(graph.x + 4.0f, graph.y - 12.0f, 10.0f, "APPLIED GAIN HISTORY",
-             180, 181, 178, ALIGN_LEFT | ALIGN_MIDDLE);
-
-    char currentBuffer[48]{};
-    std::snprintf(currentBuffer, sizeof(currentBuffer), "%+.1f dB",
-                  values_[paramIndex(ParamId::appliedGainValue)]);
-    drawText(graph.x + graph.width, graph.y - 12.0f, 10.5f, currentBuffer, 34,
-             236, 232, ALIGN_RIGHT | ALIGN_MIDDLE);
-
-    fillRounded(graph.x - 5.0f, graph.y - 4.0f, graph.width + 10.0f,
-                graph.height + 9.0f, 8.0f, 5, 6, 6);
-    strokeRounded(graph.x - 5.0f, graph.y - 4.0f, graph.width + 10.0f,
-                  graph.height + 9.0f, 8.0f, 1.0f, 78, 78, 72);
-    fillRounded(graph.x, graph.y, graph.width, graph.height, 4.0f, 4, 17, 19);
-
-    constexpr float plotLeft = 23.0f;
-    for (int gain = -15; gain <= 15; gain += 5) {
-      const float y =
-          graph.y + (15.0f - static_cast<float>(gain)) / 30.0f * graph.height;
-      beginPath();
-      moveTo(graph.x + plotLeft, y);
-      lineTo(graph.x + graph.width, y);
-      strokeWidth(gain == 0 ? 0.9f : 0.55f);
-      strokeColor(gain == 0 ? 43 : 27, gain == 0 ? 68 : 48,
-                  gain == 0 ? 68 : 49);
-      stroke();
-
-      char tick[8]{};
-      if (gain > 0)
-        std::snprintf(tick, sizeof(tick), "+%d", gain);
-      else
-        std::snprintf(tick, sizeof(tick), "%d", gain);
-      drawText(graph.x + 17.0f, y, 8.0f, tick, 137, 139, 135,
-               ALIGN_RIGHT | ALIGN_MIDDLE);
+    constexpr float x = 387, y = 115, w = 540, h = 152;
+    for (int i = 0; i <= 20; ++i)
+      line(x + w * i / 20, y, x + w * i / 20, y + h, .5f, 30, 43, 53);
+    for (int i = 0; i <= 6; ++i) {
+      const float yy = y + h * i / 6;
+      line(x, yy, x + w, yy, i == 3 ? .8f : .5f,
+           i == 3 ? 53 : 30, i == 3 ? 70 : 43, i == 3 ? 80 : 53);
+      char tick[12]; const int value = 15 - i * 5;
+      std::snprintf(tick, sizeof(tick), value > 0 ? "+%d" : "%d", value);
+      label(x - 9, yy, tick, 10, ALIGN_RIGHT | ALIGN_MIDDLE);
     }
-
-    for (int column = 1; column < 16; ++column) {
-      const float x =
-          graph.x + plotLeft +
-          static_cast<float>(column) / 16.0f * (graph.width - plotLeft);
-      beginPath();
-      moveTo(x, graph.y);
-      lineTo(x, graph.y + graph.height);
-      strokeWidth(0.45f);
-      strokeColor(22, 45, 46);
-      stroke();
-    }
-
-    drawText(graph.x + graph.width - 5.0f, graph.y + graph.height - 8.0f, 8.5f,
-             "60 s", 151, 151, 146, ALIGN_RIGHT | ALIGN_MIDDLE);
-
-    if (history_.size() < 2)
-      return;
-
-    const auto drawHistory = [&] {
-      beginPath();
-      bool connected = false;
-      double previousTime = 0.0;
-      for (std::size_t i = 0; i < history_.size(); ++i) {
-        const auto &sample = history_.at(i);
-        const double position =
-            (sample.time - (historyNow_ - gainpilot::ui::GainHistory::duration)) /
-            gainpilot::ui::GainHistory::duration;
-        if (position < 0.0) {
-          connected = false;
-          continue;
-        }
-        const float x = graph.x + plotLeft + static_cast<float>(position) *
-                                                (graph.width - plotLeft);
-        const float y = graph.y + (15.0f - sample.gain) / 30.0f * graph.height;
-        if (!connected || sample.time - previousTime >
-                              gainpilot::ui::GainHistory::interval * 1.5)
-          moveTo(x, y);
-        else
-          lineTo(x, y);
-        connected = true;
-        previousTime = sample.time;
-      }
+    label(x + w - 2, y + h + 12, "60 s", 10, ALIGN_RIGHT | ALIGN_MIDDLE);
+    save(); scissor(x, y, w, h);
+    // Fill and stroke each contiguous run independently, preserving clock gaps.
+    const double firstTime = historyNow_ - gainpilot::ui::GainHistory::duration;
+    const auto pointX = [&](std::size_t i) {
+      return x + w * static_cast<float>((history_.at(i).time - firstTime) /
+                                       gainpilot::ui::GainHistory::duration);
     };
-    drawHistory();
-    strokeWidth(4.0f);
-    strokeColor(8, 60, 61);
-    stroke();
-    drawHistory();
-    strokeWidth(1.8f);
-    strokeColor(45, 240, 236);
-    stroke();
+    const auto pointY = [&](std::size_t i) { return y + h * (15 - history_.at(i).gain) / 30; };
+    for (std::size_t start = 0; start < history_.size();) {
+      std::size_t end = start + 1;
+      while (end < history_.size() && history_.at(end).time - history_.at(end - 1).time <=
+             gainpilot::ui::GainHistory::interval * 1.5) ++end;
+      if (end - start >= 2) {
+        const auto areaPaint = linearGradient(0, y, 0, y + h,
+            Color(43, 218, 242, .23f), Color(43, 218, 242, .04f));
+        // Convex strips keep the fill below the curve on every host renderer.
+        for (std::size_t i = start + 1; i < end; ++i) {
+          if (pointY(i - 1) >= y + h && pointY(i) >= y + h) continue;
+          beginPath(); moveTo(pointX(i - 1), y + h);
+          lineTo(pointX(i - 1), pointY(i - 1));
+          lineTo(pointX(i), pointY(i)); lineTo(pointX(i), y + h);
+          closePath(); fillPaint(areaPaint); fill();
+        }
+        beginPath(); moveTo(pointX(start), pointY(start));
+        for (std::size_t i = start + 1; i < end; ++i) lineTo(pointX(i), pointY(i));
+        strokeWidth(2); strokeColor(43, 222, 243); stroke();
+      }
+      start = end;
+    }
+    restore();
   }
 
-  void drawResetButton() {
-    constexpr Bounds button{67.0f, 384.0f, 218.0f, 38.0f};
-    fillRounded(button.x - 5.0f, button.y - 5.0f, button.width + 10.0f,
-                button.height + 10.0f, 8.0f, 5, 6, 6);
-    fillRounded(button.x, button.y, button.width, button.height, 6.0f,
-                resetPressed_ ? 15 : 15, resetPressed_ ? 62 : 24,
-                resetPressed_ ? 62 : 25);
-    strokeRounded(button.x, button.y, button.width, button.height, 6.0f, 1.2f,
-                  38, 225, 220);
-    strokeRounded(button.x + 4.0f, button.y + 4.0f, button.width - 8.0f,
-                  button.height - 8.0f, 3.0f, 0.7f, 26, 75, 74);
-    drawText(button.x + button.width * 0.5f, button.y + button.height * 0.5f,
-             11.5f, "RESET / RELEARN", 48, 231, 228,
-             ALIGN_CENTER | ALIGN_MIDDLE);
+  void drawRotaryControl(ParamId id, float cx, float cy) {
+    const float n = normalized(id);
+    label(cx, cy - 57, shortLabel(id), 11, ALIGN_CENTER | ALIGN_MIDDLE);
+    for (int i = 0; i <= 24; ++i) {
+      const float a = (.75f + 1.5f * static_cast<float>(i) / 24) * kPi;
+      circleFill(cx + std::cos(a) * 48, cy + std::sin(a) * 48,
+                 i % 3 == 0 ? .85f : .6f, i <= n * 24 ? 195 : 90,
+                 i <= n * 24 ? 211 : 107, i <= n * 24 ? 223 : 120);
+    }
+    ring(cx, cy, 41, 1, 2, 47, 58, 68);
+    ring(cx, cy, 41, n, 2.3f, 44, 220, 241);
+    circleFill(cx, cy + 2, 36, 5, 10, 14);
+    beginPath(); circle(cx, cy, 34);
+    fillPaint(linearGradient(cx - 30, cy - 34, cx + 25, cy + 34,
+                            Color(46, 55, 64), Color(24, 31, 38))); fill();
+    circleStroke(cx, cy, 34, 1.2f, 67, 79, 89);
+    ring(cx, cy, 30, 1, .6f, 62, 73, 83);
+    const float a = (.75f + 1.5f * n) * kPi;
+    line(cx + std::cos(a) * 18, cy + std::sin(a) * 18,
+         cx + std::cos(a) * 32, cy + std::sin(a) * 32, 2, 244, 246, 249);
+    const auto& spec = gainpilot::parameterSpec(id);
+    char minimum[16], maximum[16], value[32];
+    std::snprintf(minimum, sizeof(minimum), "%g", static_cast<double>(spec.minValue));
+    std::snprintf(maximum, sizeof(maximum), id == ParamId::maxCut ? "-%g" : spec.maxValue > 0 ? "+%g" : "%g", static_cast<double>(spec.maxValue));
+    label(cx - 50, cy + 44, minimum, 10, ALIGN_CENTER | ALIGN_MIDDLE);
+    label(cx + 50, cy + 44, maximum, 10, ALIGN_CENTER | ALIGN_MIDDLE);
+    std::snprintf(value, sizeof(value), "%s%.1f dB",
+                  id == ParamId::maxCut && values_[paramIndex(id)] > 0 ? "-" : values_[paramIndex(id)] > 0 ? "+" : "", values_[paramIndex(id)]);
+    fillRounded(cx - 35, cy + 47, 70, 24, 8, 14, 22, 28);
+    strokeRounded(cx - 35, cy + 47, 70, 24, 8, 1, 40, 53, 62);
+    drawText(cx, cy + 59, 12, value, 237, 242, 247, ALIGN_CENTER | ALIGN_MIDDLE);
   }
 
-  void drawScrew(const float x, const float y) {
-    circleFill(x + 1.0f, y + 2.0f, 14.0f, 4, 5, 5);
-    circleFill(x, y, 13.0f, 24, 25, 24);
-    circleStroke(x, y, 13.0f, 1.0f, 111, 105, 92);
-    circleFill(x - 2.0f, y - 2.0f, 9.0f, 36, 37, 35);
-    circleStroke(x, y, 9.5f, 0.8f, 10, 11, 11);
-    beginPath();
-    moveTo(x - 5.0f, y);
-    lineTo(x + 5.0f, y);
-    moveTo(x, y - 5.0f);
-    lineTo(x, y + 5.0f);
-    strokeWidth(2.5f);
-    strokeColor(4, 4, 4);
-    stroke();
-    beginPath();
-    moveTo(x - 4.5f, y - 1.0f);
-    lineTo(x + 4.5f, y - 1.0f);
-    moveTo(x - 1.0f, y - 4.5f);
-    lineTo(x - 1.0f, y + 4.5f);
-    strokeWidth(0.8f);
-    strokeColor(115, 109, 95);
-    stroke();
+  enum class Icon { none, waveform, speech, stereo, mono, reset };
+
+  void drawIcon(Icon icon, float x, float y, bool selected) {
+    const int r = selected ? 47 : 196, g = selected ? 227 : 204, b = selected ? 247 : 214;
+    if (icon == Icon::stereo) {
+      circleStroke(x - 3, y, 6, 1.3f, r, g, b); circleStroke(x + 3, y, 6, 1.3f, r, g, b);
+    } else if (icon == Icon::mono) {
+      line(x - 5, y - 4, x - 5, y + 4, 1.4f, r, g, b);
+      line(x, y - 8, x, y + 8, 1.4f, r, g, b);
+      line(x + 5, y - 4, x + 5, y + 4, 1.4f, r, g, b);
+    } else if (icon == Icon::waveform) {
+      beginPath(); moveTo(x - 8, y + 1); lineTo(x - 4, y + 1);
+      lineTo(x - 1, y - 8); lineTo(x + 2, y + 8);
+      lineTo(x + 4, y + 1); lineTo(x + 8, y + 1);
+      strokeWidth(1.3f); strokeColor(r, g, b); stroke();
+    } else if (icon == Icon::speech) {
+      beginPath(); ellipse(x, y - 1, 7, 6); strokeWidth(1.3f); strokeColor(r, g, b); stroke();
+      line(x - 4, y + 3, x - 6, y + 8, 1.3f, r, g, b);
+      line(x - 6, y + 8, x + 1, y + 5, 1.3f, r, g, b);
+    } else if (icon == Icon::reset) {
+      beginPath(); arc(x, y, 6, -kPi / 2, kPi * 1.2f, CW);
+      strokeWidth(1.5f); strokeColor(r, g, b); stroke();
+      line(x, y - 6, x - 3, y - 8, 1.5f, r, g, b);
+      line(x, y - 6, x - 2, y - 3, 1.5f, r, g, b);
+    }
   }
 
-  void drawVerticalDivider(const float x, const float top, const float bottom) {
-    beginPath();
-    moveTo(x, top);
-    lineTo(x, bottom);
-    strokeWidth(0.7f);
-    strokeColor(57, 59, 57);
-    stroke();
+  void drawModeButton(const Bounds& b, const char* title, bool selected,
+                      Icon icon = Icon::none, bool disabled = false) {
+    fillRounded(b.x, b.y, b.width, b.height, 7, selected ? 14 : 20,
+                selected ? 35 : 28, selected ? 44 : 35);
+    strokeRounded(b.x, b.y, b.width, b.height, 7, selected ? 1.2f : 1,
+                  selected ? 43 : 50, selected ? 228 : 63, selected ? 247 : 73);
+    const float offset = icon == Icon::none ? 0 : 10;
+    drawIcon(icon, b.x + b.width / 2 - 29, b.y + b.height / 2, selected);
+    drawText(b.x + b.width / 2 + offset, b.y + b.height / 2, 12, title,
+             disabled ? 99 : selected ? 43 : 221, disabled ? 114 : selected ? 229 : 228,
+             disabled ? 126 : selected ? 249 : 237, ALIGN_CENTER | ALIGN_MIDDLE);
   }
 
-  void fillRect(const float x, const float y, const float width,
-                const float height, const int red, const int green,
-                const int blue) {
-    beginPath();
-    rect(x, y, width, height);
-    fillColor(red, green, blue);
-    fill();
+  void drawWorkflow() {
+    line(22, 451, 923, 451, .8f, 40, 53, 63);
+    label(22, 469, "PROGRAM", 10); label(385, 469, "CHANNEL", 10);
+    line(357, 463, 357, 530, .8f, 40, 53, 63);
+    const bool speech = values_[paramIndex(ParamId::programMode)] >= .5f;
+    const bool mono = values_[paramIndex(ParamId::channelMode)] >= .5f;
+    drawModeButton({22, 485, 145, 38}, "Auto", !speech, Icon::waveform);
+    drawModeButton({175, 485, 155, 38}, "Speech", speech, Icon::speech);
+    drawModeButton({385, 485, 132, 38}, "Stereo", !mono, Icon::stereo,
+                   DISTRHO_PLUGIN_NUM_INPUTS == 1);
+    drawModeButton({525, 485, 142, 38}, "Mono", mono, Icon::mono);
+    drawModeButton({823, 482, 120, 40}, "Reset", resetPressed_, Icon::reset);
+  }
+
+  void drawSettings() {
+    fillRounded(kSettings.x, kSettings.y, kSettings.width, kSettings.height, 8, 17, 26, 33);
+    strokeRounded(kSettings.x, kSettings.y, kSettings.width, kSettings.height, 8, 1, 55, 74, 86);
+    drawText(366, 100, 16, "Settings", 241, 245, 250, ALIGN_LEFT | ALIGN_MIDDLE);
+    line(917, 95, 926, 104, 1.3f, 182, 196, 208);
+    line(926, 95, 917, 104, 1.3f, 182, 196, 208);
+    label(366, 139, "INPUT REFERENCE");
+    char reference[48];
+    std::snprintf(reference, sizeof(reference), "%.1f LUFS%s",
+                  values_[paramIndex(ParamId::inputReferenceValue)], capturing_ ? "  ·  Capturing" : "");
+    drawText(366, 163, 18, reference, 45, 219, 243, ALIGN_LEFT | ALIGN_MIDDLE);
+    drawModeButton({366, 191, 92, 35}, "Follow", !capturing_ && values_[paramIndex(ParamId::referenceMode)] < .5f);
+    drawModeButton({470, 191, 119, 35}, "Learn input", capturing_);
+    drawModeButton({601, 191, 123, 35}, capturing_ ? "Stop & Lock" : "Lock", values_[paramIndex(ParamId::referenceMode)] >= .5f);
+    drawRotaryControl(ParamId::maxCut, 830, 203);
+    label(366, 252, "NEXT FACTORY PRESET");
+    drawModeButton({366, 268, 209, 34}, gainpilot::kFactoryPresetNames[(presetIndex_ + 1) % gainpilot::kFactoryPresetNames.size()], false);
+    drawModeButton({587, 268, 65, 34}, "Save", false);
+    drawModeButton({664, 268, 65, 34}, "Load", false);
+    line(366, 320, 926, 320, .8f, 40, 55, 66);
+    constexpr std::array<ParamId, 3> meters{ParamId::inputIntegratedValue, ParamId::outputIntegratedValue, ParamId::outputShortTermValue};
+    constexpr std::array<const char*, 3> names{"INPUT INTEGRATED", "OUTPUT INTEGRATED", "OUTPUT SHORT-TERM"};
+    for (std::size_t i = 0; i < meters.size(); ++i) {
+      const float x = 366 + static_cast<float>(i) * 188;
+      label(x, 340, names[i], 10);
+      char value[32]; std::snprintf(value, sizeof(value), "%.1f LUFS", values_[paramIndex(meters[i])]);
+      drawText(x, 367, 17, value, 226, 235, 243, ALIGN_LEFT | ALIGN_MIDDLE);
+    }
+    char reduction[48];
+    std::snprintf(reduction, sizeof(reduction), "Peak reduction  %.1f dB", values_[paramIndex(ParamId::gainReductionValue)]);
+    label(366, 397, reduction, 10);
+    if (!status_.empty()) label(366, 421, status_.c_str(), 10);
   }
 
   void fillRounded(const float x, const float y, const float width,
@@ -832,14 +665,6 @@ private:
     stroke();
   }
 
-  void drawEmbossedText(const float x, const float y, const float size,
-                        const char *const value, const int red, const int green,
-                        const int blue, const int alignment) {
-    drawText(x + 1.5f, y + 2.0f, size, value, 2, 3, 3, alignment);
-    drawText(x - 0.5f, y - 0.5f, size, value, 104, 104, 100, alignment);
-    drawText(x, y, size, value, red, green, blue, alignment);
-  }
-
   void drawText(const float x, const float y, const float size,
                 const char *const value, const int red, const int green,
                 const int blue, const int alignment) {
@@ -867,8 +692,7 @@ private:
     if (index >= kUiScales.size())
       return false;
 
-    uiScaleIndex_ = index;
-    const float scaleFactor = kUiScales[index];
+    const float scaleFactor = kUiScales[index] * static_cast<float>(getScaleFactor());
     setSize(
         static_cast<std::uint32_t>(std::lround(kDesignWidth * scaleFactor)),
         static_cast<std::uint32_t>(std::lround(kDesignHeight * scaleFactor)));
@@ -904,7 +728,8 @@ private:
   ParamId activeSlider_{ParamId::count};
   float dragStartY_{0.0f};
   float dragStartValue_{0.0f};
-  std::size_t uiScaleIndex_{1};
+  bool settingsOpen_{false};
+  bool targetTrackDrag_{false};
   bool resetPressed_{false};
   bool capturing_{false};
   bool captureAcknowledged_{false};
