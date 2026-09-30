@@ -137,9 +137,16 @@ float smoothTowards(float current, float target, float attackCoeff, float releas
 void GainPilotProcessor::prepare(double sampleRate, std::size_t channelCount, std::size_t maxBlockSize) {
   sampleRate_ = sampleRate;
   channelCount_ = channelCount;
-  stereoInputMeter_.prepare(sampleRate_, 2);
+  if (channelCount_ >= 2) {
+    stereoInputMeter_.prepare(sampleRate_, 2);
+    stereoOutputMeter_.prepare(sampleRate_, 2);
+  } else {
+    // Re-preparing a formerly stereo processor must also release its unused
+    // histories. This runs only in preparation, never on the audio thread.
+    stereoInputMeter_ = LoudnessMeter{};
+    stereoOutputMeter_ = LoudnessMeter{};
+  }
   monoInputMeter_.prepare(sampleRate_, 1);
-  stereoOutputMeter_.prepare(sampleRate_, 2);
   monoOutputMeter_.prepare(sampleRate_, 1);
   limiter_.prepare(sampleRate_, channelCount_, 0.035375);
   frameInput_.assign(channelCount_, 0.0f);
@@ -371,7 +378,8 @@ void GainPilotProcessor::process(const ProcessBuffer& buffer) {
           stereoInputFrame_[channel] + monoMix_ * (monoInputFrame_[0] - stereoInputFrame_[channel]);
     }
 
-    const bool stereoInputControlHop = stereoInputMeter_.processFrame(stereoInputFrame_.data());
+    const bool stereoInputControlHop = channelCount_ >= 2 &&
+                                       stereoInputMeter_.processFrame(stereoInputFrame_.data());
     const bool monoInputControlHop = monoInputMeter_.processFrame(monoInputFrame_.data());
     const bool inputControlHop = monoMode ? monoInputControlHop : stereoInputControlHop;
     if (fixedGainOnly && inputControlHop) {
@@ -379,7 +387,7 @@ void GainPilotProcessor::process(const ProcessBuffer& buffer) {
       freezeThreshold = freezeThresholdLufs();
     }
     if (!fixedGainOnly && inputControlHop) {
-      if (parameters_.get(ParamId::referenceMode) < 0.5f &&
+      if (channelCount_ >= 2 && parameters_.get(ParamId::referenceMode) < 0.5f &&
           stereoInputMeter_.integratedBlockCount() >= kInputLevelReadyBlocks) {
         learnedStereoInputLevelLufs_ = smoothTowards(learnedStereoInputLevelLufs_,
                                                      stereoInputMeter_.integratedLufs(),
@@ -518,7 +526,8 @@ void GainPilotProcessor::process(const ProcessBuffer& buffer) {
     stereoOutputFrame_[1] = channelCount_ >= 2 ? frameOutput_[1] : 0.0f;
     monoOutputFrame_[0] =
         channelCount_ >= 2 ? 0.5f * (stereoOutputFrame_[0] + stereoOutputFrame_[1]) : stereoOutputFrame_[0];
-    (void)stereoOutputMeter_.processFrame(stereoOutputFrame_.data());
+    if (channelCount_ >= 2)
+      (void)stereoOutputMeter_.processFrame(stereoOutputFrame_.data());
     (void)monoOutputMeter_.processFrame(monoOutputFrame_.data());
 
     for (std::size_t channel = 0; channel < channelCount_; ++channel) {
