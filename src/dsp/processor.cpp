@@ -541,6 +541,11 @@ void GainPilotProcessor::process(const ProcessBuffer& buffer) {
                -(std::min(0.0f, fastGainDb_) + std::min(0.0f, mediumGainDb_) + std::min(0.0f, slowGainDb_)));
 }
 
+std::size_t GainPilotProcessor::meterStorageBytes() const {
+  return stereoInputMeter_.storageBytes() + monoInputMeter_.storageBytes() +
+         stereoOutputMeter_.storageBytes() + monoOutputMeter_.storageBytes();
+}
+
 float GainPilotProcessor::currentMeterValue() const {
   return currentMeterValue_;
 }

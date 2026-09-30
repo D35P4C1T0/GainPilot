@@ -29,30 +29,32 @@ void operator delete[](void* p, std::size_t) noexcept { release(p); }
 
 int main() {
   constexpr std::size_t block = 256;
-  gainpilot::dsp::GainPilotProcessor processor;
-  processor.prepare(48000, 2, block);
-  gainpilot::ParameterState state;
-  std::vector<float> left(block), right(block), outLeft(block), outRight(block);
-  const float* inputs[]{left.data(), right.data()};
-  float* outputs[]{outLeft.data(), outRight.data()};
-  tracking = true;
-  for (std::size_t b = 0; b < 4000; ++b) {
-    for (std::size_t n = 0; n < block; ++n) {
-      left[n] = .15f * std::sin(static_cast<float>(b * block + n) * .13f);
-      right[n] = -.3f * left[n];
+  for (const std::size_t channels : {1U, 2U}) {
+    gainpilot::dsp::GainPilotProcessor processor;
+    processor.prepare(48000, channels, block);
+    gainpilot::ParameterState state;
+    std::vector<float> left(block), right(block), outLeft(block), outRight(block);
+    const float* inputs[]{left.data(), right.data()};
+    float* outputs[]{outLeft.data(), outRight.data()};
+    tracking = true;
+    for (std::size_t b = 0; b < 4000; ++b) {
+      for (std::size_t n = 0; n < block; ++n) {
+        left[n] = .15f * std::sin(static_cast<float>(b * block + n) * .13f);
+        right[n] = -.3f * left[n];
+      }
+      state.set(gainpilot::ParamId::meterReset, b % 400 == 399 ? 1 : 0);
+      state.set(gainpilot::ParamId::channelMode, (b / 500) % 2);
+      processor.setParameters(state);
+      processor.process({inputs, outputs, channels, block});
+      if (b % 900 == 899) processor.reset(); // Transport rewind path.
+      (void)processor.currentInputIntegratedLufs();
+      (void)processor.currentOutputIntegratedLufs();
     }
-    state.set(gainpilot::ParamId::meterReset, b % 400 == 399 ? 1 : 0);
-    state.set(gainpilot::ParamId::channelMode, (b / 500) % 2);
-    processor.setParameters(state);
-    processor.process({inputs, outputs, 2, block});
-    if (b % 900 == 899) processor.reset(); // Transport rewind path.
-    (void)processor.currentInputIntegratedLufs();
-    (void)processor.currentOutputIntegratedLufs();
-  }
-  tracking = false;
-  if (allocations || deallocations) {
-    std::cerr << "Audio-thread allocations=" << allocations << " frees=" << deallocations << '\n';
-    return 1;
+    tracking = false;
+    if (allocations || deallocations) {
+      std::cerr << "Audio-thread allocations=" << allocations << " frees=" << deallocations << '\n';
+      return 1;
+    }
   }
   // One hour at 8 kHz exercises duration-independent histogram storage and
   // lookup, without spending that hour in the more expensive limiter.

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace gainpilot::dsp {
 namespace {
@@ -26,12 +27,21 @@ void LoudnessMeter::reset() {
   shortTermIndex_ = sampleCounter_ = 0;
   momentaryEnergySum_ = shortTermEnergySum_ = 0.0;
   momentaryLufs_ = shortTermLufs_ = controlLufs_ = -70.0f;
-  std::fill(energyWindow_.begin(), energyWindow_.end(), 0.0);
+  // Old ring entries are ignored until overwritten. Reset cost therefore does
+  // not scale with sample rate or the length of the short-term window.
   resetIntegrated();
 }
 
 void LoudnessMeter::resetIntegrated() {
-  std::fill(integratedHistogram_.begin(), integratedHistogram_.end(), EnergyBin{});
+  // Only a group's first insertion after reset clears its bins (at most 128).
+  // Stale groups are excluded from queries. Wraparound invalidates the small
+  // fixed directory, never the full histogram or rolling energy storage.
+  if (histogramGeneration_ == std::numeric_limits<std::uint64_t>::max()) {
+    histogramGroups_.fill(HistogramGroup{});
+    histogramGeneration_ = 1;
+  } else {
+    ++histogramGeneration_;
+  }
   integratedSampleCounter_ = integratedBlockCount_ = absoluteBlockCount_ = 0;
   absoluteEnergySum_ = 0.0;
   integratedLufs_ = -70.0f;
@@ -48,7 +58,8 @@ bool LoudnessMeter::processFrame(const float* frame) {
       : shortTermIndex_ + shortTermSamples_ - momentarySamples_;
   const double oldMomentary = sampleCounter_ >= momentarySamples_ ? energyWindow_[momentaryIndex] : 0.0;
   momentaryEnergySum_ += weightedEnergy - oldMomentary;
-  shortTermEnergySum_ += weightedEnergy - energyWindow_[shortTermIndex_];
+  const double oldShortTerm = sampleCounter_ >= shortTermSamples_ ? energyWindow_[shortTermIndex_] : 0.0;
+  shortTermEnergySum_ += weightedEnergy - oldShortTerm;
   energyWindow_[shortTermIndex_] = weightedEnergy;
   if (++shortTermIndex_ == shortTermSamples_) shortTermIndex_ = 0;
   ++sampleCounter_;
@@ -72,8 +83,18 @@ void LoudnessMeter::updateIntegratedState() {
   if (energy >= kAbsoluteGateEnergy) {
     const double binPosition = (loudnessFromEnergy(energy) - kAbsoluteGateLufs) * 100.0;
     const auto index = static_cast<std::size_t>(std::clamp(binPosition, 0.0, static_cast<double>(kHistogramBins - 1)));
+    auto& group = histogramGroups_[index / kGroupBins];
+    if (group.generation != histogramGeneration_) {
+      const std::size_t begin = (index / kGroupBins) * kGroupBins;
+      const std::size_t end = std::min(begin + kGroupBins, kHistogramBins);
+      std::fill(integratedHistogram_.begin() + begin, integratedHistogram_.begin() + end, EnergyBin{});
+      group.total = EnergyBin{};
+      group.generation = histogramGeneration_;
+    }
     integratedHistogram_[index].sum += energy;
     ++integratedHistogram_[index].count;
+    group.total.sum += energy;
+    ++group.total.count;
     absoluteEnergySum_ += energy;
     ++absoluteBlockCount_;
   }
@@ -86,9 +107,19 @@ void LoudnessMeter::updateIntegratedState() {
       static_cast<double>(kHistogramBins - 1)));
   double sum = 0.0;
   std::uint64_t count = 0;
-  for (std::size_t i = firstBin; i < integratedHistogram_.size(); ++i) {
-    sum += integratedHistogram_[i].sum;
-    count += integratedHistogram_[i].count;
+  const std::size_t firstGroup = firstBin / kGroupBins;
+  if (histogramGroups_[firstGroup].generation == histogramGeneration_) {
+    const std::size_t end = std::min((firstGroup + 1) * kGroupBins, kHistogramBins);
+    for (std::size_t i = firstBin; i < end; ++i) {
+      sum += integratedHistogram_[i].sum;
+      count += integratedHistogram_[i].count;
+    }
+  }
+  for (std::size_t group = firstGroup + 1; group < kHistogramGroups; ++group) {
+    if (histogramGroups_[group].generation == histogramGeneration_) {
+      sum += histogramGroups_[group].total.sum;
+      count += histogramGroups_[group].total.count;
+    }
   }
   integratedLufs_ = count > 0 ? loudnessFromEnergy(sum / count) : -70.0f;
 }
@@ -96,6 +127,10 @@ void LoudnessMeter::updateIntegratedState() {
 float LoudnessMeter::loudnessFromEnergy(double energy) {
   return static_cast<float>(std::max(kAbsoluteGateLufs,
       kLoudnessOffset + 10.0 * std::log10(std::max(energy, 1.0e-12))));
+}
+std::size_t LoudnessMeter::storageBytes() const {
+  return energyWindow_.capacity() * sizeof(double) + integratedHistogram_.capacity() * sizeof(EnergyBin) +
+         sizeof(histogramGroups_) + weightingFilter_.storageBytes();
 }
 float LoudnessMeter::momentaryLufs() const { return momentaryLufs_; }
 float LoudnessMeter::shortTermLufs() const { return shortTermLufs_; }
