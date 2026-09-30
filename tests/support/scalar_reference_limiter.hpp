@@ -1,3 +1,4 @@
+// Frozen pre-optimization scalar implementation for numerical regression only.
 #pragma once
 
 #include <array>
@@ -6,7 +7,7 @@
 
 namespace gainpilot::dsp {
 
-class TruePeakLimiter {
+class ScalarReferenceLimiter {
 public:
   void prepare(double sampleRate, std::size_t channelCount,
                double latencySeconds = 0.020);
@@ -36,15 +37,12 @@ private:
   std::vector<std::vector<float>> delayLines_{};
   static constexpr std::size_t kFilterTaps = 128;
   static constexpr std::size_t kPhases = 16;
-  // Tap-major coefficients let the compiler vectorize independent phases,
-  // retaining sequential accumulation within each reconstruction. The final
-  // lane is zero padding for the three 15-phase full-band families.
-  std::array<std::array<float, kPhases>, kFilterTaps> interpolation_{};
+  std::array<std::array<float, kFilterTaps>, kPhases - 1> interpolation_{};
   // Shorter reconstruction filters can ring higher on isolated transients
   // than the long detector. Cover both common broadcast-meter supports.
-  std::array<std::array<float, kPhases>, 12> shortInterpolation_{};
-  std::array<std::array<float, kPhases>, 24> mediumInterpolation_{};
-  std::array<std::array<float, kPhases>, kFilterTaps> bandlimitedInterpolation_{};
+  std::array<std::array<float, 12>, kPhases - 1> shortInterpolation_{};
+  std::array<std::array<float, 24>, kPhases - 1> mediumInterpolation_{};
+  std::array<std::array<float, kFilterTaps>, kPhases> bandlimitedInterpolation_{};
   // Mirrored rings keep each FIR dot product contiguous.
   std::vector<std::array<float, kFilterTaps * 2>> sampleHistory_{};
   std::size_t historyWrite_{0};
