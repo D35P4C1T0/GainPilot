@@ -33,7 +33,6 @@ private:
   // Only the relative-gate boundary is quantized, never the stored energies.
   static constexpr std::size_t kHistogramBins = 17001;
   [[nodiscard]] static float loudnessFromEnergy(double meanEnergy);
-  void pushWindowSample(std::vector<double>& window, std::size_t& index, double sample, double& runningSum);
   void updateIntegratedState();
 
   std::size_t channelCount_{2};
@@ -43,7 +42,6 @@ private:
   std::size_t sampleCounter_{0};
   std::size_t integratedSampleCounter_{0};
   std::size_t integratedBlockCount_{0};
-  std::size_t momentaryIndex_{0};
   std::size_t shortTermIndex_{0};
   double momentaryEnergySum_{0.0};
   double shortTermEnergySum_{0.0};
@@ -53,8 +51,9 @@ private:
   float shortTermLufs_{-70.0f};
   float integratedLufs_{-70.0f};
   float controlLufs_{-70.0f};
-  std::vector<double> momentaryWindow_{};
-  std::vector<double> shortTermWindow_{};
+  // Both windows read the same sample-energy history. Independent sums retain
+  // the original sample-by-sample accumulation and exact window boundaries.
+  std::vector<double> energyWindow_{};
   std::vector<EnergyBin> integratedHistogram_{};
   KWeightingFilter weightingFilter_{};
 };
