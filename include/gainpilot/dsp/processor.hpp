@@ -24,7 +24,6 @@ public:
   void reset();
   void requestMeterReset() { resetPending_ = true; }
   void setParameters(const ParameterState& state);
-  void setOfflineMode(bool offlineMode);
   [[nodiscard]] std::size_t latencySamples() const;
   void process(const ProcessBuffer& buffer);
   [[nodiscard]] float currentMeterValue() const;
@@ -89,7 +88,6 @@ private:
   float inputLevelReleaseCoeff_{0.0f};
   float currentMeterValue_{-70.0f};
   float currentLatencySamples_{0.0f};
-  bool offlineMode_{false};
   bool resetWasHigh_{false};
   bool resetPending_{false};
   std::uint32_t meterResetCount_{0};

@@ -199,10 +199,6 @@ void GainPilotProcessor::setParameters(const ParameterState& state) {
   parameters_ = state;
 }
 
-void GainPilotProcessor::setOfflineMode(bool offlineMode) {
-  offlineMode_ = offlineMode;
-}
-
 std::size_t GainPilotProcessor::latencySamples() const {
   return limiter_.latencySamples();
 }

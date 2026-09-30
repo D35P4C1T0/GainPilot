@@ -22,7 +22,6 @@ int main(int argc, char** argv) {
   processor.prepare(rate, 2, block);
   processor.setParameters(parameters);
   processor.reset();
-  processor.setOfflineMode(true);
   auto* meter = ebur128_init(2, rate, EBUR128_MODE_I | EBUR128_MODE_TRUE_PEAK);
   if (!meter) return 1;
   std::vector<float> left(block), right(block), outLeft(block), outRight(block), interleaved(block * 2);
