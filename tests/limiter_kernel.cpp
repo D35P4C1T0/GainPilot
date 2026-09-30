@@ -28,7 +28,15 @@ double timeLimiter(double rate, size_t channels, const std::vector<float>& input
   return ms;
 }
 void benchmark() {
-  std::cout << "Compiler: " << __VERSION__ << "\nAlternating seven rounds; one warmup discarded; 1s audio per round.\n";
+  std::cout << "Compiler: ";
+#if defined(_MSC_VER)
+  std::cout << "MSVC " << _MSC_VER;
+#elif defined(__VERSION__)
+  std::cout << __VERSION__;
+#else
+  std::cout << "unknown";
+#endif
+  std::cout << "\nAlternating seven rounds; one warmup discarded; 1s audio per round.\n";
   for (double rate : {44100., 48000., 96000.}) {
     for (size_t channels : {1u, 2u}) {
       for (bool silent : {false, true}) {
