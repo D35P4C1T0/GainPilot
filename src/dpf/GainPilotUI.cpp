@@ -3,11 +3,13 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
 
 #include "gainpilot/parameters.hpp"
 #include "gainpilot/presets.hpp"
+#include "gainpilot/ui/gain_history.hpp"
 
 START_NAMESPACE_DISTRHO
 
@@ -105,12 +107,17 @@ protected:
     values_[index] = value;
     if (capturing_ && index == paramIndex(ParamId::meterResetCount) && value != captureResetCount_)
       captureAcknowledged_ = true;
-    if (index == paramIndex(ParamId::appliedGainValue)) {
-      history_[historyWrite_] = std::clamp(value, -15.0f, 15.0f);
-      historyWrite_ = (historyWrite_ + 1) % history_.size();
-      historySize_ = std::min(historySize_ + 1, history_.size());
-    }
     repaint();
+  }
+
+  // DPF owns uiIdle's editor lifecycle; no registered callback survives close.
+  // steady_clock measures editor wall time, including stopped playback. Missed
+  // callbacks remain timestamped gaps instead of inventing past gain samples.
+  void uiIdle() override {
+    historyNow_ = std::chrono::duration<double>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+    if (history_.sample(historyNow_, values_[paramIndex(ParamId::appliedGainValue)]))
+      repaint();
   }
 
   void stateChanged(const char *, const char *) override {}
@@ -691,45 +698,39 @@ private:
     drawText(graph.x + graph.width - 5.0f, graph.y + graph.height - 8.0f, 8.5f,
              "60 s", 151, 151, 146, ALIGN_RIGHT | ALIGN_MIDDLE);
 
-    if (historySize_ < 2)
+    if (history_.size() < 2)
       return;
 
-    beginPath();
-    for (std::size_t i = 0; i < historySize_; ++i) {
-      const std::size_t offset =
-          (historyWrite_ + history_.size() - historySize_ + i) %
-          history_.size();
-      const float x = graph.x + plotLeft +
-                      static_cast<float>(i) /
-                          static_cast<float>(history_.size() - 1) *
-                          (graph.width - plotLeft);
-      const float y =
-          graph.y + (15.0f - history_[offset]) / 30.0f * graph.height;
-      if (i == 0)
-        moveTo(x, y);
-      else
-        lineTo(x, y);
-    }
+    const auto drawHistory = [&] {
+      beginPath();
+      bool connected = false;
+      double previousTime = 0.0;
+      for (std::size_t i = 0; i < history_.size(); ++i) {
+        const auto &sample = history_.at(i);
+        const double position =
+            (sample.time - (historyNow_ - gainpilot::ui::GainHistory::duration)) /
+            gainpilot::ui::GainHistory::duration;
+        if (position < 0.0) {
+          connected = false;
+          continue;
+        }
+        const float x = graph.x + plotLeft + static_cast<float>(position) *
+                                                (graph.width - plotLeft);
+        const float y = graph.y + (15.0f - sample.gain) / 30.0f * graph.height;
+        if (!connected || sample.time - previousTime >
+                              gainpilot::ui::GainHistory::interval * 1.5)
+          moveTo(x, y);
+        else
+          lineTo(x, y);
+        connected = true;
+        previousTime = sample.time;
+      }
+    };
+    drawHistory();
     strokeWidth(4.0f);
     strokeColor(8, 60, 61);
     stroke();
-
-    beginPath();
-    for (std::size_t i = 0; i < historySize_; ++i) {
-      const std::size_t offset =
-          (historyWrite_ + history_.size() - historySize_ + i) %
-          history_.size();
-      const float x = graph.x + plotLeft +
-                      static_cast<float>(i) /
-                          static_cast<float>(history_.size() - 1) *
-                          (graph.width - plotLeft);
-      const float y =
-          graph.y + (15.0f - history_[offset]) / 30.0f * graph.height;
-      if (i == 0)
-        moveTo(x, y);
-      else
-        lineTo(x, y);
-    }
+    drawHistory();
     strokeWidth(1.8f);
     strokeColor(45, 240, 236);
     stroke();
@@ -898,9 +899,8 @@ private:
   }
 
   std::array<float, gainpilot::kNumParameters> values_{};
-  std::array<float, 180> history_{};
-  std::size_t historyWrite_{0};
-  std::size_t historySize_{0};
+  gainpilot::ui::GainHistory history_{};
+  double historyNow_{0.0};
   ParamId activeSlider_{ParamId::count};
   float dragStartY_{0.0f};
   float dragStartValue_{0.0f};
