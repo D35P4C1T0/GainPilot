@@ -18,11 +18,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential cmake pkg-config libebur128-dev liblilv-dev libsoxr-dev libsndfile1-dev libgl1-mesa-dev libx11-dev libxcursor-dev libxext-dev libxrandr-dev
       - name: Configure with independent libebur128 tests
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DGAINPILOT_REFERENCE_TESTS=ON
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DGAINPILOT_REQUIRE_REFERENCES=ON -DGAINPILOT_ENABLE_BENCHMARKS=ON
       - name: Build
-        run: cmake --build build --config Release
+        run: cmake --build build --config Release --parallel
       - name: Test
         run: ctest --test-dir build --output-on-failure
+      - name: Report DSP callback timing
+        run: build/gainpilot_benchmark --quick > build/benchmark.csv
+      - uses: actions/upload-artifact@v6
+        with:
+          name: gainpilot-linux-benchmark
+          path: build/benchmark.csv
       - name: Stage install tree
         run: |
           cmake --install build --prefix "$PWD/stage"
@@ -50,7 +56,7 @@ jobs:
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DGAINPILOT_ENABLE_LV2=OFF -DGAINPILOT_PLUGINVAL="$RUNNER_TEMP/pluginval/pluginval.app/Contents/MacOS/pluginval"
       - name: Build
-        run: cmake --build build --config Release
+        run: cmake --build build --config Release --parallel
       - name: Test
         run: ctest --test-dir build --output-on-failure
       - name: Stage install tree
@@ -88,7 +94,7 @@ jobs:
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DGAINPILOT_ENABLE_LV2=OFF
       - name: Build
-        run: cmake --build build --config Release
+        run: cmake --build build --config Release --parallel
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure
       - name: Stage install tree

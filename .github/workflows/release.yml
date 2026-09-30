@@ -20,9 +20,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential cmake pkg-config libebur128-dev liblilv-dev libsoxr-dev libsndfile1-dev libgl1-mesa-dev libx11-dev libxcursor-dev libxext-dev libxrandr-dev
       - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DGAINPILOT_REQUIRE_REFERENCES=ON
       - name: Build
-        run: cmake --build build --config Release
+        run: cmake --build build --config Release --parallel
       - name: Test
         run: ctest --test-dir build --output-on-failure
       - name: Stage install tree
@@ -43,7 +43,7 @@ jobs:
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DGAINPILOT_ENABLE_LV2=OFF
       - name: Build
-        run: cmake --build build --config Release
+        run: cmake --build build --config Release --parallel
       - name: Test
         run: ctest --test-dir build --output-on-failure
       - name: Stage install tree
@@ -76,7 +76,7 @@ jobs:
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DGAINPILOT_ENABLE_LV2=OFF
       - name: Build
-        run: cmake --build build --config Release
+        run: cmake --build build --config Release --parallel
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure
       - name: Stage install tree
