@@ -28,6 +28,7 @@ public:
   [[nodiscard]] std::size_t latencySamples() const;
   void process(const ProcessBuffer& buffer);
   [[nodiscard]] float currentMeterValue() const;
+  [[nodiscard]] std::size_t meterStorageBytes() const;
   [[nodiscard]] float currentLatencySamples() const;
   [[nodiscard]] float currentAppliedGainDb() const;
   [[nodiscard]] float currentInputShortTermLufs() const;

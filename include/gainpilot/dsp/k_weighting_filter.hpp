@@ -10,6 +10,9 @@ class KWeightingFilter {
 public:
   void prepare(double sampleRate, std::size_t channelCount);
   void reset();
+  [[nodiscard]] std::size_t storageBytes() const {
+    return (highShelves_.capacity() + highPasses_.capacity()) * sizeof(Biquad);
+  }
   [[nodiscard]] float processSample(std::size_t channel, float sample);
 
 private:

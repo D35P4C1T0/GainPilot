@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -23,8 +24,10 @@ public:
   [[nodiscard]] bool shortTermReady() const;
   [[nodiscard]] float controlLufs() const;
   [[nodiscard]] float loudnessForMode(MeterMode mode) const;
+  [[nodiscard]] std::size_t storageBytes() const;
 
 private:
+  friend struct LoudnessMeterTestAccess;
   struct EnergyBin {
     double sum{};
     std::uint64_t count{};
@@ -32,6 +35,12 @@ private:
   // 0.01 LU bins from -70 to +100 LUFS; exact sums within each bin.
   // Only the relative-gate boundary is quantized, never the stored energies.
   static constexpr std::size_t kHistogramBins = 17001;
+  static constexpr std::size_t kGroupBins = 128;
+  static constexpr std::size_t kHistogramGroups = (kHistogramBins + kGroupBins - 1) / kGroupBins;
+  struct HistogramGroup {
+    EnergyBin total{};
+    std::uint64_t generation{};
+  };
   [[nodiscard]] static float loudnessFromEnergy(double meanEnergy);
   void updateIntegratedState();
 
@@ -55,6 +64,8 @@ private:
   // the original sample-by-sample accumulation and exact window boundaries.
   std::vector<double> energyWindow_{};
   std::vector<EnergyBin> integratedHistogram_{};
+  std::array<HistogramGroup, kHistogramGroups> histogramGroups_{};
+  std::uint64_t histogramGeneration_{0};
   KWeightingFilter weightingFilter_{};
 };
 
