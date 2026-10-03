@@ -190,6 +190,7 @@ protected:
 
       activeDial_ = id;
       editParameter(paramIndex(id), true);
+      dragStartX_ = x;
       dragStartY_ = y;
       dragStartValue_ = values_[paramIndex(id)];
       return true;
@@ -284,7 +285,16 @@ protected:
     if (activeDial_ != ParamId::count) {
       if (std::abs(x - lastClickX_) > 5 || std::abs(y - lastClickY_) > 5)
         lastClickedDial_ = ParamId::count;
-      updateKnobFromY(activeDial_, y);
+      if (activeDial_ == ParamId::targetLevel) {
+        const float angle = std::atan2(y - 237, x - 171) -
+                            std::atan2(dragStartY_ - 237, dragStartX_ - 171);
+        updateKnobFromY(activeDial_, dragStartY_ -
+            std::remainder(angle, 2 * kPi) / (1.5f * kPi) * 120);
+        dragStartX_ = x;
+        dragStartY_ = y;
+        dragStartValue_ = values_[paramIndex(activeDial_)];
+      } else
+        updateKnobFromY(activeDial_, y);
       return true;
     }
     const int hovered = Bounds{22, 485, 145, 38}.contains(x, y) ? 0 :
@@ -758,6 +768,7 @@ private:
   gainpilot::ui::GainHistory history_{};
   double historyNow_{0.0};
   ParamId activeDial_{ParamId::count};
+  float dragStartX_{0.0f};
   float dragStartY_{0.0f};
   float dragStartValue_{0.0f};
   bool settingsOpen_{false};
