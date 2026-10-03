@@ -232,6 +232,8 @@ float GainPilotProcessor::currentInputReferenceLufs() const {
 }
 
 float GainPilotProcessor::freezeThresholdLufs() const {
+  if (parameters_.get(ParamId::freezeMode) >= 0.5f)
+    return parameters_.get(ParamId::freezeLevel);
   return std::clamp(effectiveInputLevelLufs() - kAutoFreezeOffsetLufs, kAutoFreezeMinLufs, kAutoFreezeMaxLufs);
 }
 
@@ -402,7 +404,7 @@ void GainPilotProcessor::process(const ProcessBuffer& buffer) {
       const float inputFastDetectorLufs = selectedInputMeter.momentaryLufs();
       const float inputReferenceLufs = effectiveInputLevelLufs();
       baselineTarget = std::clamp(parameters_.get(ParamId::targetLevel) - inputReferenceLufs, minGain, maxGain);
-      freezeThreshold = std::clamp(inputReferenceLufs - kAutoFreezeOffsetLufs, kAutoFreezeMinLufs, kAutoFreezeMaxLufs);
+      freezeThreshold = freezeThresholdLufs();
       const float highMix = correctionMix(true);
       const float lowMix = correctionMix(false);
       const float targetLevel = parameters_.get(ParamId::targetLevel);

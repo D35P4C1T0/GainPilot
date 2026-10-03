@@ -51,5 +51,36 @@ int main() {
       }
     }
   }
+  // A quiet tone below the automatic -50 LUFS threshold must only receive
+  // boost when manual freeze is lowered. Check live mode/threshold changes too.
+  gainpilot::dsp::GainPilotProcessor freezeProcessor;
+  freezeProcessor.prepare(48000, 1, 256);
+  gainpilot::ParameterState freezeState;
+  freezeState.set(gainpilot::ParamId::referenceMode, 1);
+  freezeState.set(gainpilot::ParamId::lockedReference, -23);
+  std::vector<float> quietInput(256), quietOutput(256);
+  const float* quietIn[]{quietInput.data()};
+  float* quietOut[]{quietOutput.data()};
+  std::size_t sample = 0;
+  auto playQuiet = [&] {
+    freezeProcessor.setParameters(freezeState);
+    for (int block = 0; block < 600; ++block) {
+      for (auto& value : quietInput)
+        value = .003f * static_cast<float>(std::sin(2 * pi * 1000 * sample++ / 48000));
+      freezeProcessor.process({quietIn, quietOut, 1, quietInput.size()});
+    }
+    return freezeProcessor.currentAppliedGainDb();
+  };
+  if (std::abs(playQuiet()) > .01f) return 1;
+  freezeState.set(gainpilot::ParamId::freezeMode, 1);
+  freezeState.set(gainpilot::ParamId::freezeLevel, -60);
+  if (playQuiet() < 5) { std::cerr << "Manual freeze failed to enable quiet boost\n"; return 1; }
+  freezeState.set(gainpilot::ParamId::freezeLevel, -40);
+  if (std::abs(playQuiet()) > .01f) { std::cerr << "Manual freeze failed to remove boost\n"; return 1; }
+  freezeState.set(gainpilot::ParamId::freezeLevel, -60);
+  if (playQuiet() < 5) return 1;
+  freezeState.set(gainpilot::ParamId::freezeMode, 0);
+  if (std::abs(playQuiet()) > .01f) return 1;
+
   std::cout << "Learning timing and reset passed at three rates and two block sizes\n";
 }

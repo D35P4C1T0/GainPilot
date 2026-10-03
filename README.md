@@ -139,6 +139,17 @@ Typical install locations under the selected prefix are:
 - `GAINPILOT_CLAP_VALIDATOR` — optional path to the full external CLAP validator; see known transient-parameter failures in the validation notes. Dedicated CLAP host regressions run whenever CLAP and tests are enabled.
 - `GAINPILOT_DPF_PATH` — use another DPF checkout instead of `dpf/`
 
+## Freeze Threshold
+
+The cog menu includes **Freeze Threshold** with **Auto** and **Manual** modes.
+Auto follows the input reference minus 27 LU, bounded between -60 and -35 LUFS
+(-50 LUFS at the default reference). Manual enables a slider from -70 to
+-10 LUFS. Below the threshold, positive boost returns to 0 dB while audio
+continues to pass. Lower the threshold to keep leveling quieter passages;
+raise it to freeze sooner. Hover over the control for a brief explanation.
+The mode and manual threshold are saved with sessions and presets; older
+sessions retain Auto behavior.
+
 ## Learning and Presets
 
 The **Follow** button keeps learning the input reference automatically. For a

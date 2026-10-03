@@ -32,6 +32,7 @@ enum class ParamId : std::uint32_t {
   lockedReference,
   inputReferenceValue,
   meterResetCount,
+  freezeMode,
   count
 };
 
@@ -66,7 +67,7 @@ inline constexpr std::array kParameterSpecs{
     ParameterSpec{ParamId::targetLevel, "target_level", "Target Level", -30.0f, -10.0f, -16.0f, true, false},
     ParameterSpec{ParamId::truePeak, "true_peak", "True Peak", -10.0f, 0.0f, -1.0f, true, false},
     ParameterSpec{ParamId::maxGain, "max_gain", "Max Boost", -10.0f, 30.0f, 30.0f, true, false},
-    ParameterSpec{ParamId::freezeLevel, "freeze_level", "Legacy Freeze", -70.0f, -10.0f, -50.0f, true, false},
+    ParameterSpec{ParamId::freezeLevel, "freeze_level", "Freeze Threshold", -70.0f, -10.0f, -50.0f, true, false},
     ParameterSpec{ParamId::inputLevel, "input_level", "Input Level", -40.0f, 0.0f, -23.0f, true, false},
     ParameterSpec{ParamId::correctionHigh, "correction_high", "Correction High", 0.0f, 100.0f, 100.0f, true, false},
     ParameterSpec{ParamId::correctionLow, "correction_low", "Correction Low", 0.0f, 100.0f, 100.0f, true, false},
@@ -87,6 +88,7 @@ inline constexpr std::array kParameterSpecs{
     ParameterSpec{ParamId::lockedReference, "locked_reference", "Locked Input Reference", -70.0f, 10.0f, -23.0f, true, false},
     ParameterSpec{ParamId::inputReferenceValue, "input_reference_value", "Input Reference", -70.0f, 10.0f, -23.0f, false, true},
     ParameterSpec{ParamId::meterResetCount, "meter_reset_count", "Meter Reset Count", 0.0f, 16777215.0f, 0.0f, false, true},
+    ParameterSpec{ParamId::freezeMode, "freeze_mode", "Freeze Mode", 0.0f, 1.0f, 0.0f, true, false},
 };
 
 inline constexpr std::size_t kNumParameters = kParameterSpecs.size();

@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.1] - 2026-10-03
+
+- Add Auto/Manual freeze controls in the cog menu, with an adjustable -70 to -10 LUFS threshold and a live threshold readout.
+- Add a delayed hover explanation with balanced padding and line spacing.
+- Save freeze settings in sessions and presets while keeping automatic freeze behavior for older state versions.
+- Validate quiet-input boost, live freeze-mode changes, and version-5 state migration.
+
 ## [0.6.0] - 2026-09-30
 
 - Replace the brushed-metal editor with a flat dark interface, cyan target dial, filled 60-second gain graph, and three primary rotary controls.

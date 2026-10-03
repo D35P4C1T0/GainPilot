@@ -187,6 +187,10 @@ protected:
             parameter.hints = kParameterIsAutomatable | kParameterIsTrigger |
                               kParameterIsHidden;
             break;
+        case ParamId::freezeMode:
+            parameter.hints |= kParameterIsInteger;
+            setEnumeration(parameter, {{0.0f, "Auto"}, {1.0f, "Manual"}});
+            break;
         case ParamId::referenceMode:
             parameter.hints |= kParameterIsInteger;
             setEnumeration(parameter, {{0.0f, "Automatic follow"}, {1.0f, "Locked"}});
@@ -215,7 +219,6 @@ protected:
                             {1.0f, "Short-Term"},
                             {2.0f, "Integrated"}});
             break;
-        case ParamId::freezeLevel:
         case ParamId::inputLevel:
         case ParamId::correctionHigh:
         case ParamId::correctionLow:

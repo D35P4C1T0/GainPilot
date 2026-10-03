@@ -11,9 +11,13 @@ int main() {
   state.set(gainpilot::ParamId::referenceMode, 1);
   state.set(gainpilot::ParamId::lockedReference, -29.25f);
   state.set(gainpilot::ParamId::inputReferenceValue, -12);
+  state.set(gainpilot::ParamId::freezeMode, 1);
+  state.set(gainpilot::ParamId::freezeLevel, -57.5f);
   auto restored = gainpilot::deserializeState(gainpilot::serializeState(state));
   if (!restored || restored->get(gainpilot::ParamId::lockedReference) != -29.25f ||
       restored->get(gainpilot::ParamId::referenceMode) != 1 ||
+      restored->get(gainpilot::ParamId::freezeMode) != 1 ||
+      restored->get(gainpilot::ParamId::freezeLevel) != -57.5f ||
       restored->get(gainpilot::ParamId::inputReferenceValue) != -23) return 1;
 
   // Construct a real V4 payload, preserving its original parameter order.
@@ -25,6 +29,17 @@ int main() {
   auto old = gainpilot::deserializeState(legacy);
   if (!old || old->get(gainpilot::ParamId::referenceMode) != 0 ||
       old->get(gainpilot::ParamId::programMode) != 1) return 1;
+
+  // Older sessions retain automatic freeze, regardless of legacy threshold.
+  auto v5 = gainpilot::serializeState(state);
+  const std::uint32_t v5Version = 5, v5Count = 15;
+  std::memcpy(v5.data() + 4, &v5Version, sizeof(v5Version));
+  std::memcpy(v5.data() + 8, &v5Count, sizeof(v5Count));
+  v5.resize(12 + v5Count * sizeof(float));
+  auto restoredV5 = gainpilot::deserializeState(v5);
+  if (!restoredV5 || restoredV5->get(gainpilot::ParamId::freezeMode) != 0 ||
+      restoredV5->get(gainpilot::ParamId::freezeLevel) != -57.5f ||
+      restoredV5->get(gainpilot::ParamId::lockedReference) != -29.25f) return 1;
 
   gainpilot::dsp::GainPilotProcessor processor;
   processor.prepare(48000, 1, 256);

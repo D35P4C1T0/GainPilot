@@ -19,12 +19,13 @@ using gainpilot::ParamId;
 
 constexpr float kDesignWidth = 960.0f;
 constexpr float kDesignHeight = 544.0f;
-constexpr std::array<ParamId, 5> kDialParameters{
+constexpr std::array<ParamId, 6> kDialParameters{
     ParamId::targetLevel,
     ParamId::inputTrim,
     ParamId::truePeak,
     ParamId::maxGain,
     ParamId::maxCut,
+    ParamId::freezeLevel,
 };
 constexpr std::array<float, 4> kUiScales{0.75f, 1.0f, 1.25f, 1.5f};
 constexpr std::array<const char *, 4> kUiScaleLabels{"75%", "100%", "125%",
@@ -47,6 +48,8 @@ struct Bounds {
 
 constexpr Bounds kTargetDial{40, 104, 264, 252};
 constexpr Bounds kSettings{347, 78, 598, 365};
+constexpr Bounds kFreezeSlider{568, 272, 265, 28};
+constexpr Bounds kFreezeArea{366, 244, 560, 62};
 
 Bounds dialBounds(const ParamId id) noexcept {
   switch (id) {
@@ -54,7 +57,8 @@ Bounds dialBounds(const ParamId id) noexcept {
   case ParamId::inputTrim: return {382, 325, 102, 117};
   case ParamId::truePeak: return {587, 325, 102, 117};
   case ParamId::maxGain: return {790, 325, 102, 117};
-  case ParamId::maxCut: return {779, 146, 102, 130};
+  case ParamId::maxCut: return {779, 126, 102, 130};
+  case ParamId::freezeLevel: return kFreezeSlider;
   default: return {};
   }
 }
@@ -118,6 +122,11 @@ protected:
     finishMeterReset();
     historyNow_ = std::chrono::duration<double>(
         std::chrono::steady_clock::now().time_since_epoch()).count();
+    if (tooltipMode_ == 2 && !freezeTooltipVisible_ &&
+        std::chrono::steady_clock::now() - freezeHoverStart_ >= std::chrono::milliseconds(650)) {
+      freezeTooltipVisible_ = true;
+      repaint();
+    }
     if (history_.sample(historyNow_, values_[paramIndex(ParamId::appliedGainValue)]))
       repaint();
   }
@@ -193,6 +202,7 @@ protected:
       dragStartX_ = x;
       dragStartY_ = y;
       dragStartValue_ = values_[paramIndex(id)];
+      if (id == ParamId::freezeLevel) updateFreezeFromX(x);
       return true;
     }
     lastClickedDial_ = ParamId::count;
@@ -236,13 +246,17 @@ protected:
       status_ = "Reference locked; saved with the session";
       return setDiscreteParameter(ParamId::referenceMode, 1);
     }
-    if (settingsOpen_ && Bounds{366, 268, 209, 34}.contains(x, y)) {
+    if (settingsOpen_ && Bounds{366, 272, 75, 28}.contains(x, y))
+      return setDiscreteParameter(ParamId::freezeMode, 0);
+    if (settingsOpen_ && Bounds{449, 272, 95, 28}.contains(x, y))
+      return setDiscreteParameter(ParamId::freezeMode, 1);
+    if (settingsOpen_ && Bounds{366, 405, 209, 28}.contains(x, y)) {
       presetIndex_ = (presetIndex_ + 1) % gainpilot::kFactoryPresetNames.size();
       applyPreset(gainpilot::factoryPreset(presetIndex_));
       status_ = gainpilot::kFactoryPresetNames[presetIndex_];
       return true;
     }
-    if (settingsOpen_ && (Bounds{587, 268, 65, 34}.contains(x, y) || Bounds{664, 268, 65, 34}.contains(x, y))) {
+    if (settingsOpen_ && (Bounds{587, 405, 65, 28}.contains(x, y) || Bounds{664, 405, 65, 28}.contains(x, y))) {
       savingPreset_ = x < 660;
       FileBrowserOptions options;
       options.saving = savingPreset_;
@@ -285,7 +299,9 @@ protected:
     if (activeDial_ != ParamId::count) {
       if (std::abs(x - lastClickX_) > 5 || std::abs(y - lastClickY_) > 5)
         lastClickedDial_ = ParamId::count;
-      if (activeDial_ == ParamId::targetLevel) {
+      if (activeDial_ == ParamId::freezeLevel) {
+        updateFreezeFromX(x);
+      } else if (activeDial_ == ParamId::targetLevel) {
         const float angle = std::atan2(y - 237, x - 171) -
                             std::atan2(dragStartY_ - 237, dragStartX_ - 171);
         updateKnobFromY(activeDial_, dragStartY_ -
@@ -298,9 +314,12 @@ protected:
       return true;
     }
     const int hovered = Bounds{22, 485, 145, 38}.contains(x, y) ? 0 :
-                        Bounds{175, 485, 155, 38}.contains(x, y) ? 1 : -1;
+                        Bounds{175, 485, 155, 38}.contains(x, y) ? 1 :
+                        settingsOpen_ && kFreezeArea.contains(x, y) ? 2 : -1;
     if (hovered != tooltipMode_) {
       tooltipMode_ = hovered;
+      freezeTooltipVisible_ = false;
+      freezeHoverStart_ = std::chrono::steady_clock::now();
       repaint();
     }
     return hovered >= 0;
@@ -348,6 +367,7 @@ protected:
   bool onKeyboard(const KeyboardEvent& event) override {
     if (event.press && event.key == kKeyEscape && settingsOpen_) {
       settingsOpen_ = false;
+      tooltipMode_ = -1;
       repaint();
       return true;
     }
@@ -382,6 +402,8 @@ private:
   }
 
   bool dialVisible(ParamId id) const {
+    if (id == ParamId::freezeLevel)
+      return settingsOpen_ && values_[paramIndex(ParamId::freezeMode)] >= .5f;
     return id == ParamId::targetLevel || (id == ParamId::maxCut) == settingsOpen_;
   }
 
@@ -404,6 +426,21 @@ private:
 
   void drawModeTooltip() {
     if (tooltipMode_ < 0 || activeDial_ != ParamId::count) return;
+    if (tooltipMode_ == 2) {
+      if (!settingsOpen_ || !freezeTooltipVisible_) return;
+      constexpr Bounds tooltip{366, 308, 560, 70};
+      constexpr std::array<const char*, 3> lines{
+          "Below this input loudness, positive boost returns to 0 dB; audio still passes.",
+          "Auto follows the input reference. Manual sets a fixed threshold.",
+          "Lower it to keep leveling quieter passages; raise it to freeze sooner.",
+      };
+      fillRounded(tooltip.x, tooltip.y, tooltip.width, tooltip.height, 7, 24, 38, 47);
+      strokeRounded(tooltip.x, tooltip.y, tooltip.width, tooltip.height, 7, 1, 63, 91, 107);
+      for (std::size_t i = 0; i < lines.size(); ++i)
+        label(tooltip.x + 12, tooltip.y + 17 + static_cast<float>(i) * 18,
+              lines[i], 10, ALIGN_LEFT | ALIGN_MIDDLE);
+      return;
+    }
     fillRounded(22, 388, 308, 53, 7, 24, 38, 47);
     strokeRounded(22, 388, 308, 53, 7, 1, 63, 91, 107);
     drawText(33, 401, 11, tooltipMode_ == 0 ? "Auto" : "Speech",
@@ -661,11 +698,11 @@ private:
     drawModeButton({366, 191, 92, 35}, "Follow", !capturing_ && values_[paramIndex(ParamId::referenceMode)] < .5f);
     drawModeButton({470, 191, 119, 35}, "Learn input", capturing_);
     drawModeButton({601, 191, 123, 35}, capturing_ ? "Stop & Lock" : "Lock", values_[paramIndex(ParamId::referenceMode)] >= .5f);
-    drawRotaryControl(ParamId::maxCut, 830, 203);
-    label(366, 252, "NEXT FACTORY PRESET");
-    drawModeButton({366, 268, 209, 34}, gainpilot::kFactoryPresetNames[(presetIndex_ + 1) % gainpilot::kFactoryPresetNames.size()], false);
-    drawModeButton({587, 268, 65, 34}, "Save", false);
-    drawModeButton({664, 268, 65, 34}, "Load", false);
+    drawRotaryControl(ParamId::maxCut, 830, 183);
+    drawFreezeControl();
+    drawModeButton({366, 405, 209, 28}, gainpilot::kFactoryPresetNames[(presetIndex_ + 1) % gainpilot::kFactoryPresetNames.size()], false);
+    drawModeButton({587, 405, 65, 28}, "Save", false);
+    drawModeButton({664, 405, 65, 28}, "Load", false);
     line(366, 320, 926, 320, .8f, 40, 55, 66);
     constexpr std::array<ParamId, 3> meters{ParamId::inputIntegratedValue, ParamId::outputIntegratedValue, ParamId::outputShortTermValue};
     constexpr std::array<const char*, 3> names{"INPUT INTEGRATED", "OUTPUT INTEGRATED", "OUTPUT SHORT-TERM"};
@@ -678,7 +715,34 @@ private:
     char reduction[48];
     std::snprintf(reduction, sizeof(reduction), "Peak reduction  %.1f dB", values_[paramIndex(ParamId::gainReductionValue)]);
     label(366, 397, reduction, 10);
-    if (!status_.empty()) label(366, 421, status_.c_str(), 10);
+    if (!status_.empty()) label(366, 119, status_.c_str(), 10);
+  }
+
+  void drawFreezeControl() {
+    const bool manual = values_[paramIndex(ParamId::freezeMode)] >= .5f;
+    const float threshold = manual ? values_[paramIndex(ParamId::freezeLevel)] :
+        std::clamp(values_[paramIndex(ParamId::inputReferenceValue)] - 27.0f, -60.0f, -35.0f);
+    label(366, 252, "FREEZE THRESHOLD  (?)", 10);
+    drawModeButton({366, 272, 75, 28}, "Auto", !manual);
+    drawModeButton({449, 272, 95, 28}, "Manual", manual);
+    const auto& spec = gainpilot::parameterSpec(ParamId::freezeLevel);
+    const float n = (threshold - spec.minValue) / (spec.maxValue - spec.minValue);
+    const float x = kFreezeSlider.x + 8, width = kFreezeSlider.width - 16;
+    line(x, 286, x + width, 286, 3, 55, 74, 86);
+    line(x, 286, x + n * width, 286, 3, manual ? 43 : 108, manual ? 218 : 133, manual ? 242 : 147);
+    circleFill(x + n * width, 286, 5, manual ? 43 : 108, manual ? 218 : 133, manual ? 242 : 147);
+    char value[32];
+    std::snprintf(value, sizeof(value), "%.1f LUFS", threshold);
+    drawText(925, 286, 12, value, 226, 235, 243, ALIGN_RIGHT | ALIGN_MIDDLE);
+  }
+
+  void updateFreezeFromX(float x) {
+    const float n = std::clamp((x - kFreezeSlider.x - 8) / (kFreezeSlider.width - 16), 0.0f, 1.0f);
+    const auto& spec = gainpilot::parameterSpec(ParamId::freezeLevel);
+    const float value = std::round((spec.minValue + n * (spec.maxValue - spec.minValue)) * 10) / 10;
+    values_[paramIndex(ParamId::freezeLevel)] = value;
+    setParameterValue(paramIndex(ParamId::freezeLevel), value);
+    repaint();
   }
 
   void fillRounded(const float x, const float y, const float width,
@@ -773,6 +837,8 @@ private:
   float dragStartValue_{0.0f};
   bool settingsOpen_{false};
   int tooltipMode_{-1};
+  bool freezeTooltipVisible_{false};
+  std::chrono::steady_clock::time_point freezeHoverStart_{};
   ParamId lastClickedDial_{ParamId::count};
   std::uint32_t lastClickTime_{0};
   float lastClickX_{0};
