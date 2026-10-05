@@ -87,7 +87,10 @@ jobs:
       - uses: actions/upload-artifact@v6
         with:
           name: gainpilot-macos-packages
-          path: build/packages/*
+          path: |
+            build/packages/*.zip
+            build/packages/*.tar.gz
+            build/packages/*.dmg
       - uses: actions/upload-artifact@v6
         with:
           name: gainpilot-macos-stage
